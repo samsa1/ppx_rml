@@ -23,7 +23,7 @@
 
 (* $Id$ *)
 
-open Misc
+open Rml_misc
 
 (* add a file in the list of file to compile. *)
 let add_to_compile file =
@@ -268,5 +268,6 @@ Options are:"
 (* the main function: parse the command line *)
 let configure () =
   set_init_rmllib ();
-  set_init_stdlib ()
+  set_init_stdlib ();
+
 

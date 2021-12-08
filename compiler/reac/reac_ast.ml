@@ -30,10 +30,11 @@
 
 (* The abstract syntax for the reac language *)
 
-open Asttypes
+open Rml_asttypes
 open Def_types
+open Ppxlib
 
-type ident = Ident.t
+type ident = Rml_ident.t
 
 (*type global_ident = Global_ident.qualified_ident*)
 type 'a global = 'a Global.global

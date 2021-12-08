@@ -30,10 +30,10 @@
 (* $Id$ *)
 
 open Format
-open Lexing
 open Parse_ast
-open Asttypes
-open Location
+open Rml_asttypes
+(*open Rml_location*)
+open Ppxlib
 
 let fmt_position f l =
   if l.pos_fname = "" && l.pos_lnum = 1
@@ -49,7 +49,7 @@ let fmt_location f loc =
   if loc.loc_ghost then fprintf f " ghost";
 ;;
 
-let rec fmt_parseident_aux f x =
+let fmt_parseident_aux f x =
   match x with
   | Parse_ident.Pident (s) -> fprintf f "%s" s;
   | Parse_ident.Pdot (m, s) -> fprintf f "%s.%s" m s;
@@ -135,18 +135,18 @@ let rec type_expression i ppf x =
   line i ppf "type_expression %a\n" fmt_location x.pte_loc;
   let i = i+1 in
   match x.pte_desc with
-  | Ptype_var (s) -> line i ppf "Ptype_var \'%s\n" s;
-  | Ptype_arrow (ct1, ct2) ->
+  | RmlPtype_var (s) -> line i ppf "Ptype_var \'%s\n" s;
+  | RmlPtype_arrow (ct1, ct2) ->
       line i ppf "Ptype_arrow\n";
       type_expression i ppf ct1;
       type_expression i ppf ct2;
-  | Ptype_tuple l ->
+  | RmlPtype_tuple l ->
       line i ppf "Ptype_tuple\n";
       list i type_expression ppf l;
-  | Ptype_constr (pi, l) ->
+  | RmlPtype_constr (pi, l) ->
       line i ppf "Ptype_constr %a\n" fmt_ident pi;
       list i type_expression ppf l
-  | Ptype_process (ct,k) ->
+  | RmlPtype_process (ct,k) ->
       line i ppf "Ptype_process(%s)\n"
 	(Def_static.string_of_instantaneous k);
       type_expression i ppf ct
@@ -347,7 +347,8 @@ let rec expression i ppf x =
       expression i ppf s;
   | Pexpr_default s ->
       line i ppf "Pexpr_default\n";
-      expression i ppf s;
+      expression i ppf s
+  | Pexpr_ocaml _ -> assert false;
 
 and event_config i ppf cfg =
   match cfg.pconf_desc with
@@ -391,7 +392,7 @@ and expression_x_expression i ppf (e1, e2) =
   expression i ppf e1;
   expression i ppf e2
 
-and signal_kind_x_expression_x_expression i ppf (kind, e1, e2) =
+and signal_kind_x_expression_x_expression i ppf (_kind, e1, e2) =
   expression i ppf e1;
   expression i ppf e2
 ;;
@@ -400,15 +401,15 @@ let rec type_declaration i ppf x =
   line i ppf "type_declaration \n";
   let i = i+1 in
   match x with
-  | Ptype_abstract ->
+  | RmlPtype_abstract ->
       line i ppf "Ptype_abstract\n";
-  | Ptype_rebind (te) ->
+  | RmlPtype_rebind (te) ->
       line i ppf "Ptype_rebind\n";
       type_expression i ppf te;
-  | Ptype_variant (l) ->
+  | RmlPtype_variant (l) ->
       line i ppf "Ptype_variant\n";
       list (i+1) string_x_type_expression_option ppf l;
-  | Ptype_record (l) ->
+  | RmlPtype_record (l) ->
       line i ppf "Ptype_record\n";
       list (i+1) string_x_mutable_flag_x_type_expression ppf l;
 
@@ -447,7 +448,7 @@ let rec impl_item i ppf x =
       ident i ppf id;
   | Pimpl_open (s) ->
       line i ppf "Pimpl_open %s\n" s;
-  | Pimpl_lucky (id, in_ty_list, out_ty_list, files) ->
+  | Pimpl_lucky (_id, _in_ty_list, _out_ty_list, _files) ->
       line i ppf "Pimpl_lucky ... A FAIRE ...\n";
 
 

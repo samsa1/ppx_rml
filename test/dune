@@ -1,0 +1,41 @@
+(executable
+ (name pp)
+ (modules pp)
+ (libraries rmlc ppxlib))
+
+(rule
+ (targets test1.pp2.ml)
+ (deps 
+  (file test1.ml))
+ (action (run ./pp.exe --impl %{deps} -o %{targets})))
+
+(rule
+ (targets test2.pp2.ml)
+ (deps 
+  (file test2.ml))
+ (action (run ./pp.exe --impl %{deps} -o %{targets})))
+
+(rule
+ (targets test3.pp2.ml)
+ (deps 
+  (file test3.ml))
+ (action (run ./pp.exe --impl %{deps} -o %{targets})))
+
+
+(rule
+  (targets test1.exe)
+  (deps test1.pp2.ml)
+    (action (run ocamlc -o test1.exe -I /Users/samuel/.opam/4.13.1/lib/rml/lco rmllib.cma test1.pp2.ml)))
+
+(rule
+  (targets test3.exe)
+  (deps test3.pp2.ml)
+    (action (run ocamlfind ocamlc -o test3.exe -I /Users/samuel/.opam/4.13.1/lib/rml/lco -thread -linkpkg -package graphics rmllib.cma test3.pp2.ml)))
+
+(test
+ (name test2)
+ (modules test2)
+ (deps test2.pp2.ml test1.exe test3.exe)
+ (preprocess (pps rmlc))
+  (action (run ocamlc -o test2.exe -I /Users/samuel/.opam/4.13.1/lib/rml/lco rmllib.cma test2.pp2.ml))
+)

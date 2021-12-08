@@ -45,8 +45,8 @@
 open Format
 
 type error =
-    Unclosed of Location.t * string * Location.t * string
-  | Other of Location.t
+    Unclosed of Ppxlib.Location.t * string * Ppxlib.Location.t * string
+  | Other of Ppxlib.Location.t
 
 exception Error of error
 exception Escape_error
@@ -54,10 +54,10 @@ exception Escape_error
 let report_error ppf = function
   | Unclosed(opening_loc, opening, closing_loc, closing) ->
       fprintf ppf "%aSyntax error: '%s' expected@."
-        Location.print closing_loc closing;
+        Ppxlib.Location.print closing_loc closing;
       fprintf ppf "%aThis '%s' might be unmatched"
-        Location.print opening_loc opening
+        Ppxlib.Location.print opening_loc opening
   | Other loc ->
-      fprintf ppf "%aSyntax error" Location.print loc
+      fprintf ppf "%aSyntax error" Ppxlib.Location.print loc
 
 

@@ -23,9 +23,9 @@
 
 (* $Id$ *)
 
-open Misc
+open Rml_misc
 open Parse_ast
-
+open Ppxlib
 (* Printing of error messages about Lucky import *)
 
 let not_implemented_type ty =

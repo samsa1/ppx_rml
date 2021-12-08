@@ -17,14 +17,14 @@
 (*                                                                    *)
 (**********************************************************************)
 
-(* file: asttypes.mli *)
+(* file: errors.ml *)
 
 (* Warning: *)
-(* This file is based on the original version of asttypes.mli *)
-(* from the Objective Caml 3.07 distribution, INRIA *)
+(* This file is based on the original version of errors.ml *)
+(* from the Objective Caml 3.07 distribution, INRIA        *)
 
-(* first modification: 2004-04-23 *)
-(* modified by: Louis Mandel      *)
+(* first modification: 2004-05-08  *)
+(* modified by: Louis Mandel *)
 
 (***********************************************************************)
 (*                                                                     *)
@@ -40,28 +40,42 @@
 
 (* $Id$ *)
 
-(* Types used in the a.s.t. *)
+open Format
 
-type rec_flag = Nonrecursive | Recursive
+let report_error ppf exn =
+  let report ppf = function
+    (*| Lexer.Error(err, loc) ->
+	Ppxlib.Location.print ppf loc;
+	Lexer.report_error ppf err*)
+    | Rml_syntaxerr.Error err ->
+  Rml_syntaxerr.report_error ppf err
 
-type direction_flag = Upto | Downto
+    | Rml_misc.Error -> ()
+    | Rml_misc.Internal (loc,msg) ->
+	if loc = Ppxlib.Location.none
+      	then fprintf ppf "@.Internal error: %s. \nPlease report it." msg
+	else
+	  fprintf ppf "@.%aInternal error: %s. \nPlease report it."
+	    Ppxlib.Location.print loc msg
+    | Rml_warnings.Errors (n) ->
+	fprintf ppf "@.Error: %d error-enabled warnings occurred." n
+    | x -> fprintf ppf "@]"; raise x
+  in
+  fprintf ppf "@[%a@]@." report exn
 
-type immediate_flag = Immediate | Nonimmediate
+let unbound_main main =
+  eprintf "The main process \"%s\" is unbound" main;
+  raise Rml_misc.Error
 
-type mutable_flag = Mutable | Immutable
+let bad_type_main main _main_ty =
+  eprintf
+    "The main process \"%s\" must have type unit process.\n"
+	  main;
+(*   Types_printer.output main_ty.Def_types.value_typ.Def_types.ts_desc; *)
+  raise Rml_misc.Error
 
-type await_kind = All | One
+let no_compile_itf filename =
+  eprintf "Error: Could not find the .rzi file for interface %s.rmli."
+    filename;
+  raise Rml_misc.Error
 
-type pre_kind = Status | Value
-
-type signal_kind = Default | Memory
-
-type continue_begin_of_instant = K_boi | K_not_boi
-
-type immediate =
-  | Const_unit
-  | Const_bool of bool
-  | Const_int of int
-  | Const_float of float
-  | Const_char of char
-  | Const_string of string

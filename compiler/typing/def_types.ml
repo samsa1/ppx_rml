@@ -30,8 +30,8 @@
 
 (* The abstract syntax for the types *)
 
-open Asttypes
 open Global
+open Ppxlib
 
 (* types *)
 type type_scheme =

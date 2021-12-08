@@ -25,11 +25,10 @@
 
 (* The translation of Reac to Lk *)
 
-open Asttypes
 open Def_static
 open Reac_ast
 open Lk_ast
-open Misc
+open Rml_misc
 
 
 let make_expr e loc =
@@ -60,7 +59,7 @@ let make_intf it loc =
   { kintf_desc = it;
     kintf_loc = loc; }
 
-let make_var s = Ident.create Ident.gen_var s Ident.Internal
+let make_var s = Rml_ident.create Rml_ident.gen_var s Rml_ident.Internal
 
 (* Translation of type expressions *)
 let rec translate_te typ =
@@ -80,7 +79,7 @@ let rec translate_te typ =
 
 
 (* Translation of type declatations *)
-let rec translate_type_decl typ =
+let translate_type_decl typ =
   match typ with
   | Rtype_abstract -> Ktype_abstract
   | Rtype_rebind typ -> Ktype_rebind (translate_te typ)
@@ -251,7 +250,7 @@ let rec translate_ml e =
 	      let acc' =
 		make_expr
 		  (Kexpr_seq (acc, translate_ml e))
-		  Location.none
+		  Ppxlib.Location.none
 	      in
 	      f acc' l'
 	in f (translate_ml e1) e_list
@@ -259,7 +258,7 @@ let rec translate_ml e =
     | Rexpr_process (p) ->
 	let id = make_var "k" in
 	let ctrl = make_var "ctrl" in
-	let k_var = make_proc (Kproc_var id) Location.none in
+	let k_var = make_proc (Kproc_var id) Ppxlib.Location.none in
 	Kexpr_process (id, ctrl, translate_proc p k_var ctrl)
 
     | Rexpr_pre (flag,s) ->
@@ -312,25 +311,25 @@ and translate_proc e k (ctrl: ident) =
 (* C_k[loop p] = loop (fun k' -> C_k'[p])                                  *)
 	| Rexpr_loop (None, proc) ->
 	    let id = make_var "k" in
-	    let k_var = make_proc (Kproc_var id) Location.none in
+	    let k_var = make_proc (Kproc_var id) Ppxlib.Location.none in
 	    Kproc_loop (id, translate_proc proc k_var ctrl)
 
 (* C_k[loop_n n p] = loop_n n (fun k' -> C_k'[p]) k                        *)
 	| Rexpr_loop (Some n, proc) ->
 	    let id = make_var "k" in
-	    let k_var = make_proc (Kproc_var id) Location.none in
+	    let k_var = make_proc (Kproc_var id) Ppxlib.Location.none in
 	    Kproc_loop_n(id, translate_ml n, translate_proc proc k_var ctrl, k)
 
 (* C_k[while e do p done] = while C[e] do (fun k' -> C_k'[p]) done.k       *)
 	| Rexpr_while (expr, proc) ->
 	    let id = make_var "k" in
-	    let k_var = make_proc (Kproc_var id) Location.none in
+	    let k_var = make_proc (Kproc_var id) Ppxlib.Location.none in
 	    Kproc_while (translate_ml expr,
 			 (id, translate_proc proc k_var ctrl), k)
 
 	| Rexpr_for (i, e1, e2, flag, proc) ->
 	    let id = make_var "k" in
-	    let k_var = make_proc (Kproc_var id) Location.none in
+	    let k_var = make_proc (Kproc_var id) Ppxlib.Location.none in
 	    Kproc_for(i,
 		      translate_ml e1,
 		      translate_ml e2,
@@ -343,15 +342,15 @@ and translate_proc e k (ctrl: ident) =
 (*   bind K = k in                                                         *)
 (*     fordopar i e1 e2 (\j. (k3.join_par j.K))                            *)
 	    let k_id = make_var "k" in
-	    let k_var = make_proc (Kproc_var k_id) Location.none in
+	    let k_var = make_proc (Kproc_var k_id) Ppxlib.Location.none in
 	    let k_patt =
-	      make_patt (Kpatt_var (Kvarpatt_local k_id)) Location.none
+	      make_patt (Kpatt_var (Kvarpatt_local k_id)) Ppxlib.Location.none
 	    in
 	    let j_id = make_var "j" in
 	    let join =
 	      make_proc
 		(Kproc_join_par (j_id, k_var))
-		Location.none
+		Ppxlib.Location.none
 	    in
 	    Kproc_bind
 	      (k_patt,
@@ -363,7 +362,7 @@ and translate_proc e k (ctrl: ident) =
 				 flag,
 				 (j_id, translate_proc proc join ctrl),
 				 k_var))
-		 Location.none)
+		 Ppxlib.Location.none)
 
 	| Rexpr_seq p_list ->
 	    let kproc =
@@ -371,9 +370,9 @@ and translate_proc e k (ctrl: ident) =
 		match l with
 		| [] -> assert false
 		| [p] -> translate_proc p k ctrl
-                | ({ expr_static = (ctx, Def_static.Static) } as p)::l' ->
+                | ({ expr_static = (_ctx, Def_static.Static); _ } as p)::l' ->
                     let k' = f l' in
-                      make_proc (Kproc_seq (translate_ml p, k')) Location.none
+                      make_proc (Kproc_seq (translate_ml p, k')) Ppxlib.Location.none
 		| p::l' ->
 		    let k' = f l' in
 		    translate_proc p k' ctrl
@@ -388,37 +387,37 @@ and translate_proc e k (ctrl: ident) =
 (*
       | Rexpr_par p_list ->
 	  let k_id = make_var "k" in
-	  let k_var = make_proc (Kproc_var k_id) Location.none in
+	  let k_var = make_proc (Kproc_var k_id) Ppxlib.Location.none in
 	  let k_patt =
-	    make_patt (Kpatt_var (Kvarpatt_local k_id)) Location.none
+	    make_patt (Kpatt_var (Kvarpatt_local k_id)) Ppxlib.Location.none
 	  in
 	  let j_id = make_var "j" in
 	  let k_list =
 	    List.map
 	      (fun p ->
 		translate_proc p
-		  (make_proc (Kproc_join_par (j_id, k_var)) Location.none)
+		  (make_proc (Kproc_join_par (j_id, k_var)) Ppxlib.Location.none)
 		  ctrl)
 	      p_list
 	  in
 	  Kproc_bind
 	    (k_patt,
 	     k,
-	     make_proc (Kproc_split_par (j_id, k_list)) Location.none)
+	     make_proc (Kproc_split_par (j_id, k_list)) Ppxlib.Location.none)
 *)
 (* C_k[p1||p2] =                                                           *)
 (*   bind K = k in                                                         *)
 (*     split (\j. bind Kj = join_par j.K in (k1.Kj, k2.Kj))                *)
 	| Rexpr_par p_list ->
 	    let k_id = make_var "k" in
-	    let k_var = make_proc (Kproc_var k_id) Location.none in
+	    let k_var = make_proc (Kproc_var k_id) Ppxlib.Location.none in
 	    let k_patt =
-	      make_patt (Kpatt_var (Kvarpatt_local k_id)) Location.none
+	      make_patt (Kpatt_var (Kvarpatt_local k_id)) Ppxlib.Location.none
 	    in
 	    let kj_id = make_var "kj" in
-	    let kj_var = make_proc (Kproc_var kj_id) Location.none in
+	    let kj_var = make_proc (Kproc_var kj_id) Ppxlib.Location.none in
 	    let kj_patt =
-	      make_patt (Kpatt_var (Kvarpatt_local kj_id)) Location.none
+	      make_patt (Kpatt_var (Kvarpatt_local kj_id)) Ppxlib.Location.none
 	    in
 	    let j_id = make_var "j" in
 	    let k_list =
@@ -428,26 +427,26 @@ and translate_proc e k (ctrl: ident) =
 		p_list
 	    in
 	    let join =
-	      make_proc (Kproc_join_par (j_id, k_var)) Location.none
+	      make_proc (Kproc_join_par (j_id, k_var)) Ppxlib.Location.none
 	    in
 	    Kproc_bind
 	      (k_patt,
 	       k,
 	       make_proc
 		 (Kproc_split_par (j_id, kj_patt, join, k_list))
-		 Location.none)
+		 Ppxlib.Location.none)
 
 
-	| Rexpr_merge (p1, p2) ->
+	| Rexpr_merge (_p1, _p2) ->
 	    not_yet_implemented "merge"
 
 (* C_k[signal s in p] =                                                    *)
 (*   bind K = k in signal s in C_K[p]     avec K \not= s                   *)
 	| Rexpr_signal ((s,typ), comb, proc) ->
 	    let k_id = make_var "k" in
-	    let k_var = make_proc (Kproc_var k_id) Location.none in
+	    let k_var = make_proc (Kproc_var k_id) Ppxlib.Location.none in
 	    let k_patt =
-	      make_patt (Kpatt_var (Kvarpatt_local k_id)) Location.none
+	      make_patt (Kpatt_var (Kvarpatt_local k_id)) Ppxlib.Location.none
 	    in
 	    Kproc_bind
 	      (k_patt, k,
@@ -458,7 +457,7 @@ and translate_proc e k (ctrl: ident) =
 		       (fun (k,e1,e2) ->
                          k, translate_ml e1, translate_ml e2) comb,
 		     translate_proc proc k_var ctrl))
-		 Location.none)
+		 Ppxlib.Location.none)
 
 	| Rexpr_let (flag, patt_expr_list, proc) ->
 	    translate_proc_let flag patt_expr_list proc k ctrl
@@ -470,7 +469,7 @@ and translate_proc e k (ctrl: ident) =
 (*   bind K = k in                                                         *)
 (*   start ctrl C[s] (fun ctrl' -> C_(end.k, ctrl')[p]) (x -> C_k[p'])     *)
 	| Rexpr_until (proc,
-                       [ {conf_desc = Rconf_present (_, patt_opt) } as s,
+                       [ {conf_desc = Rconf_present (_, patt_opt); _ } as s,
                          when_opt, proc_opt; ]) ->
      (* | Rexpr_until (s, proc, patt_proc_opt) -> *)
             let patt_proc_opt =
@@ -478,20 +477,20 @@ and translate_proc e k (ctrl: ident) =
               | None, None -> None
               | Some patt, Some proc -> Some (patt, proc)
               | None, Some proc ->
-                  let patt = Reac_misc.make_patt Rpatt_any Location.none in
+                  let patt = Reac_misc.make_patt Rpatt_any Ppxlib.Location.none in
                   Some (patt, proc)
-              | Some patt, None -> assert false
+              | Some _patt, None -> assert false
             in
             let k_id = make_var "k" in
-	    let k_var = make_proc (Kproc_var k_id) Location.none in
+	    let k_var = make_proc (Kproc_var k_id) Ppxlib.Location.none in
 	    let k_patt =
-	      make_patt (Kpatt_var (Kvarpatt_local k_id)) Location.none
+	      make_patt (Kpatt_var (Kvarpatt_local k_id)) Ppxlib.Location.none
 	    in
             let ctrl_id = make_var "ctrl" in
 	    let end_until =
 	      make_proc
 		(Kproc_end_until(ctrl_id, k_var))
-		Location.none
+		Ppxlib.Location.none
 	    in
 	    Kproc_bind
 	      (k_patt, k,
@@ -501,13 +500,13 @@ and translate_proc e k (ctrl: ident) =
 		     (ctrl_id, translate_proc proc end_until ctrl_id),
 		     begin match patt_proc_opt with
 		     | None ->
-			 (make_patt Kpatt_any Location.none, k_var)
+			 (make_patt Kpatt_any Ppxlib.Location.none, k_var)
 		     | Some (patt,proc') ->
 			 (translate_pattern patt,
 			  translate_proc proc' k_var ctrl)
 		     end))
-		 Location.none)
-	| Rexpr_until (proc, conf_when_opt_expr_opt_list) ->
+		 Ppxlib.Location.none)
+	| Rexpr_until (_proc, _conf_when_opt_expr_opt_list) ->
             not_yet_implemented "Reac2lk.translate_proc(until)"
 
 (* C_k[do p when s] =                                                      *)
@@ -515,15 +514,15 @@ and translate_proc e k (ctrl: ident) =
 (*   start ctrl C[s] (fun ctrl' -> C_(end.k, ctrl')[p])                    *)
 	| Rexpr_when (s, proc) ->
             let k_id = make_var "k" in
-	    let k_var = make_proc (Kproc_var k_id) Location.none in
+	    let k_var = make_proc (Kproc_var k_id) Ppxlib.Location.none in
 	    let k_patt =
-	      make_patt (Kpatt_var (Kvarpatt_local k_id)) Location.none
+	      make_patt (Kpatt_var (Kvarpatt_local k_id)) Ppxlib.Location.none
 	    in
             let ctrl_id = make_var "ctrl" in
 	    let end_when =
 	      make_proc
 		(Kproc_end_when(ctrl_id, k_var))
-		Location.none
+		Ppxlib.Location.none
 	    in
 	    Kproc_bind
 	      (k_patt, k,
@@ -531,19 +530,19 @@ and translate_proc e k (ctrl: ident) =
 		 (Kproc_start_when
 		     (ctrl, translate_conf s,
 		      (ctrl_id, translate_proc proc end_when ctrl_id)))
-		 Location.none)
+		 Ppxlib.Location.none)
 
 	| Rexpr_control (s, None, proc) ->
             let k_id = make_var "k" in
-	    let k_var = make_proc (Kproc_var k_id) Location.none in
+	    let k_var = make_proc (Kproc_var k_id) Ppxlib.Location.none in
 	    let k_patt =
-	      make_patt (Kpatt_var (Kvarpatt_local k_id)) Location.none
+	      make_patt (Kpatt_var (Kvarpatt_local k_id)) Ppxlib.Location.none
 	    in
             let ctrl_id = make_var "ctrl" in
 	    let end_control =
 	      make_proc
 		(Kproc_end_control(ctrl_id, k_var))
-		Location.none
+		Ppxlib.Location.none
 	    in
 	    Kproc_bind
 	      (k_patt, k,
@@ -551,18 +550,18 @@ and translate_proc e k (ctrl: ident) =
 		 (Kproc_start_control
 		    (ctrl, translate_conf s,
 		     (ctrl_id, translate_proc proc end_control ctrl_id)))
-		 Location.none)
+		 Ppxlib.Location.none)
 
-	| Rexpr_control (s, Some _, proc) ->
-	    Misc.not_yet_implemented "Reac2lk.translate_proc Rexpr_control"
+	| Rexpr_control (_s, Some _, _proc) ->
+	    Rml_misc.not_yet_implemented "Reac2lk.translate_proc Rexpr_control"
 
 (* C_k[let s<x> in p] =                                                    *)
 (*   bind K = k in let s<x> in C_K[p]                                      *)
 	| Rexpr_get (s, patt, proc) ->
 	    let k_id = make_var "k" in
-	    let k_var = make_proc (Kproc_var k_id) Location.none in
+	    let k_var = make_proc (Kproc_var k_id) Ppxlib.Location.none in
 	    let k_patt =
-	      make_patt (Kpatt_var (Kvarpatt_local k_id)) Location.none
+	      make_patt (Kpatt_var (Kvarpatt_local k_id)) Ppxlib.Location.none
 	    in
 	    Kproc_bind
 	      (k_patt, k,
@@ -571,13 +570,13 @@ and translate_proc e k (ctrl: ident) =
 			     translate_pattern patt,
 			     translate_proc proc k_var ctrl,
 			     ctrl))
-		 Location.none)
+		 Ppxlib.Location.none)
 
 	| Rexpr_present (s, p1, p2) ->
 	    let k_id = make_var "k" in
-	    let k_var = make_proc (Kproc_var k_id) Location.none in
+	    let k_var = make_proc (Kproc_var k_id) Ppxlib.Location.none in
 	    let k_patt =
-	      make_patt (Kpatt_var (Kvarpatt_local k_id)) Location.none
+	      make_patt (Kpatt_var (Kvarpatt_local k_id)) Ppxlib.Location.none
 	    in
 	    Kproc_bind
 	      (k_patt, k,
@@ -586,13 +585,13 @@ and translate_proc e k (ctrl: ident) =
 				 translate_conf s,
 				 translate_proc p1 k_var ctrl,
 				 translate_proc p2 k_var ctrl))
-		 Location.none)
+		 Ppxlib.Location.none)
 
 	| Rexpr_ifthenelse (expr, p1, p2) ->
 	    let k_id = make_var "k" in
-	    let k_var = make_proc (Kproc_var k_id) Location.none in
+	    let k_var = make_proc (Kproc_var k_id) Ppxlib.Location.none in
 	    let k_patt =
-	      make_patt (Kpatt_var (Kvarpatt_local k_id)) Location.none
+	      make_patt (Kpatt_var (Kvarpatt_local k_id)) Ppxlib.Location.none
 	    in
 	    Kproc_bind
 	      (k_patt, k,
@@ -600,13 +599,13 @@ and translate_proc e k (ctrl: ident) =
 		 (Kproc_ifthenelse (translate_ml expr,
 				    translate_proc p1 k_var ctrl,
 				    translate_proc p2 k_var ctrl))
-		 Location.none)
+		 Ppxlib.Location.none)
 
 	| Rexpr_match (expr, l) ->
 	    let k_id = make_var "k" in
-	    let k_var = make_proc (Kproc_var k_id) Location.none in
+	    let k_var = make_proc (Kproc_var k_id) Ppxlib.Location.none in
 	    let k_patt =
-	      make_patt (Kpatt_var (Kvarpatt_local k_id)) Location.none
+	      make_patt (Kpatt_var (Kvarpatt_local k_id)) Ppxlib.Location.none
 	    in
 	    Kproc_bind
 	      (k_patt, k,
@@ -619,7 +618,7 @@ and translate_proc e k (ctrl: ident) =
                           opt_map translate_ml when_opt,
                           translate_proc e k_var ctrl))
 		       l))
-		 Location.none)
+		 Ppxlib.Location.none)
 
 	| Rexpr_await (flag, s) ->
 	    Kproc_await (flag, translate_conf s, k, ctrl)
@@ -628,16 +627,16 @@ and translate_proc e k (ctrl: ident) =
             begin match conf.conf_desc with
             | Rconf_present (s, patt_opt) ->
 	        let k_id = make_var "k" in
-	        let k_var = make_proc (Kproc_var k_id) Location.none in
+	        let k_var = make_proc (Kproc_var k_id) Ppxlib.Location.none in
 	        let k_patt =
-                  make_patt (Kpatt_var (Kvarpatt_local k_id)) Location.none
+                  make_patt (Kpatt_var (Kvarpatt_local k_id)) Ppxlib.Location.none
                 in
                 let patt =
                   match patt_opt with
                   | Some patt ->
 	             translate_pattern patt
                   | None ->
-                      make_patt Kpatt_any Location.none
+                      make_patt Kpatt_any Ppxlib.Location.none
 	        in
 	        Kproc_bind
 	          (k_patt, k,
@@ -649,7 +648,7 @@ and translate_proc e k (ctrl: ident) =
                                        opt_map translate_ml when_opt,
 				       translate_proc proc k_var ctrl,
 				       ctrl))
-		     Location.none)
+		     Ppxlib.Location.none)
             | Rconf_and (_, _) | Rconf_or (_, _) ->
                 not_yet_implemented "Reac2lk.translate_proc(await_val) with config"
             end
@@ -682,14 +681,14 @@ and translate_proc e k (ctrl: ident) =
 
 (* Translation of let definitions in a PROCESS context *)
 and translate_proc_let =
-  let rec is_static =
+  let is_static =
     List.for_all (fun (_, expr) -> snd expr.expr_static = Def_static.Static)
   in
   fun flag patt_expr_list proc k ctrl ->
     let k_id = make_var "k" in
-    let k_var = make_proc (Kproc_var k_id) Location.none in
+    let k_var = make_proc (Kproc_var k_id) Ppxlib.Location.none in
     let k_patt =
-      make_patt (Kpatt_var (Kvarpatt_local k_id)) Location.none
+      make_patt (Kpatt_var (Kvarpatt_local k_id)) Ppxlib.Location.none
     in
     if is_static patt_expr_list then
 (* C_k[let x = e in p] =                                                   *)
@@ -705,7 +704,7 @@ and translate_proc_let =
 		   translate_pattern patt, translate_ml expr)
 		 patt_expr_list,
 	       translate_proc proc k_var ctrl))
-	   Location.none)
+	   Ppxlib.Location.none)
     else
       begin match patt_expr_list with
       | [patt, p1] ->
@@ -715,7 +714,7 @@ and translate_proc_let =
 	    make_proc
 	      (Kproc_def_dyn
 		 (translate_pattern patt, translate_proc proc k_var ctrl))
-	      Location.none
+	      Ppxlib.Location.none
 	  in
 	  Kproc_bind
 	    (k_patt,
@@ -733,7 +732,7 @@ and translate_proc_let =
 		 ((List.map (fun (patt, _) -> translate_pattern patt)
 		     patt_expr_list),
 		  translate_proc proc k ctrl))
-	      Location.none
+	      Ppxlib.Location.none
 	  in
 	  let j_id = make_var "j" in
 	  let vref_list =
@@ -748,7 +747,7 @@ and translate_proc_let =
 		let join =
 		  make_proc
 		    (Kproc_join_def (j_id, v_ref, get_vrefs_id, k_var))
-		    Location.none
+		    Ppxlib.Location.none
 		in
 		translate_proc proc join ctrl)
 	      vref_list
@@ -764,7 +763,7 @@ and translate_proc_let =
 				   vref_list patt_expr_list,
 				 get_vrefs_id,
 				 k_list))
-	       Location.none)
+	       Ppxlib.Location.none)
       end
 
 (* Translation of event configurations *)
@@ -792,15 +791,15 @@ let translate_expr_or_process e =
     | Dynamic _ ->
       let id = make_var "k" in
       let ctrl = make_var "ctrl" in
-      let k_var = make_proc (Kproc_var id) Location.none in
+      let k_var = make_proc (Kproc_var id) Ppxlib.Location.none in
       let p =
         make_expr
           (Kexpr_process (id, ctrl, translate_proc e k_var ctrl))
-          Location.none
+          Ppxlib.Location.none
       in
-      make_expr (Kexpr_exec p) Location.none
+      make_expr (Kexpr_exec p) Ppxlib.Location.none
 
-let translate_impl_item info_chan item =
+let translate_impl_item _info_chan item =
   let kitem =
     match item.impl_desc with
     | Rimpl_expr e -> Kimpl_expr (translate_expr_or_process e)
@@ -836,7 +835,7 @@ let translate_impl_item info_chan item =
   make_impl kitem item.impl_loc
 
 
-let translate_intf_item info_chan item =
+let translate_intf_item _info_chan item =
   let kitem =
     match item.intf_desc with
     | Rintf_val (gl, typ) -> Kintf_val (gl, translate_te typ)

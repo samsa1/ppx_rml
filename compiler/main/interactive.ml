@@ -63,7 +63,7 @@ let translate_phrase phrase =
     in
     None, ocaml_code
   with x ->
-    let () = Errors.report_error !Misc.err_fmt x in
+    let () = Rml_errors.report_error !Misc.err_fmt x in
     Some "", [ phrase ]
 
 (* the main function *)
@@ -88,7 +88,7 @@ let compile () =
 	let decl_list = Parse.interactive lexbuf in
 	compile_decl_list module_name (Some itf) info_fmt out_chan decl_list
       with x ->
-	Errors.report_error Format.err_formatter x;
+	Rml_errors.report_error Format.err_formatter x;
 	output_string out_chan "let () = ();;\n"
     end;
     flush out_chan;

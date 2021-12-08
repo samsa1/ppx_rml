@@ -30,7 +30,8 @@
 
 (* The abstract syntax for the parsed language *)
 
-open Asttypes
+open Rml_asttypes
+open Ppxlib
 
 type ident =
     { pident_id: Parse_ident.t;
@@ -96,6 +97,7 @@ and expression_desc =
   | Pexpr_pre of pre_kind * expression
   | Pexpr_last of expression
   | Pexpr_default of expression
+  | Pexpr_ocaml of Ppxlib.expression
 
 (* event configuration *)
 and event_config =
@@ -127,17 +129,17 @@ and type_expression =
     {pte_desc: type_expression_desc;
      pte_loc: Location.t;}
 and type_expression_desc =
-  | Ptype_var of string
-  | Ptype_arrow of type_expression * type_expression
-  | Ptype_tuple of type_expression list
-  | Ptype_constr of ident * type_expression list
-  | Ptype_process of type_expression * Def_static.instantaneous
+  | RmlPtype_var of string
+  | RmlPtype_arrow of type_expression * type_expression
+  | RmlPtype_tuple of type_expression list
+  | RmlPtype_constr of ident * type_expression list
+  | RmlPtype_process of type_expression * Def_static.instantaneous
 
 and type_declaration =
-  | Ptype_abstract
-  | Ptype_rebind of type_expression
-  | Ptype_variant of (simple_ident * type_expression option) list
-  | Ptype_record of (simple_ident * mutable_flag * type_expression) list
+  | RmlPtype_abstract
+  | RmlPtype_rebind of type_expression
+  | RmlPtype_variant of (simple_ident * type_expression option) list
+  | RmlPtype_record of (simple_ident * mutable_flag * type_expression) list
 
 (* Structure *)
 type implementation = impl_item list

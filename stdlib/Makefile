@@ -7,6 +7,7 @@ include ../config
 include ../configure-tools/Makefile.common
 include Makefile-stdlib.common
 
+RMLC=rmlc
 
 .SUFFIXES : .rmli .rzi
 .rmli.rzi:

@@ -41,8 +41,8 @@
 (* $Id$ *)
 
 open Lexing
-
-type t = { loc_start: position; loc_end: position; loc_ghost: bool };;
+open Ppxlib
+(*type t = { loc_start: position; loc_end: position; loc_ghost: bool };;*)
 
 let init lexbuf fname =
   lexbuf.lex_curr_pos <- 0;
@@ -55,13 +55,13 @@ let init lexbuf fname =
   }
 ;;
 
-let none = { loc_start = dummy_pos; loc_end = dummy_pos; loc_ghost = true };;
+(*let none = { loc_start = dummy_pos; loc_end = dummy_pos; loc_ghost = true };;*)
 
 let concat loc1 loc2 =
   { loc_start = loc1.loc_start;
     loc_end = loc2.loc_end;
     loc_ghost = loc1.loc_ghost || loc2.loc_ghost; };;
-
+(*
 let curr lexbuf = {
   loc_start = lexbuf.lex_start_p;
   loc_end = lexbuf.lex_curr_p;
@@ -132,9 +132,9 @@ let print ppf loc =
 (*   print (formatter_of_out_channel oc) loc *)
 
 let print_warning loc ppf w =
-  if Warnings.is_active w then begin
+  if Rml_warnings.is_active w then begin
     let printw ppf w =
-      let n = Warnings.print ppf w in
+      let n = Rml_warnings.print ppf w in
       num_loc_lines := !num_loc_lines + n
     in
     fprintf ppf "%a" print loc;
@@ -149,3 +149,4 @@ let prerr_warning loc w = print_warning loc err_formatter w;;
 let echo_eof () =
   print_newline ();
   incr num_loc_lines
+*)

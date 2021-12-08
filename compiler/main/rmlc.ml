@@ -28,10 +28,58 @@
 
 (* $Id$ *)
 
-open Misc
-open Modules
-open Compiler
+open Ppxlib
+open Rml_misc
 
+let () = Options.set_options ()
+let ext = 
+  Extension.declare
+    "rml"
+    Extension.Context.structure_item
+    Ast_pattern.(pstr __)
+    (fun ~loc ~path str ->
+      try
+        print_endline "Started compiling";
+        {
+          pstr_desc =
+            Pstr_eval ({
+              pexp_desc =
+                Pexp_constraint({
+                  pexp_desc =
+                    Pexp_pack {
+                      pmod_desc = Pmod_structure (Compiler.compile_implementation ~loc ~path str);
+                      pmod_loc = Location.none;
+                      pmod_attributes = [];
+                    };
+                  pexp_loc = Location.none;
+                  pexp_attributes = [];
+                  pexp_loc_stack = [];
+                },
+                {
+                  ptyp_desc = Ptyp_package ({loc = Location.none; txt = Lident "S"}, []);
+                  ptyp_loc = Location.none;
+                  ptyp_attributes = [];
+                  ptyp_loc_stack = [];
+                });
+              pexp_loc = Location.none;
+              pexp_attributes = [];
+              pexp_loc_stack = [];
+            }, []);
+          pstr_loc = Location.none;
+        }
+      with x ->
+        Rml_errors.report_error !err_fmt x;
+        Format.pp_print_flush !std_fmt ();
+        Format.pp_print_flush !err_fmt ();
+        exit 2)
+
+
+let () = Ppxlib.Driver.register_transformation "rml" ~extensions:[ext]
+
+
+
+
+(*
 (* list of object files passed on the command line *)
 let object_files = ref []
 
@@ -75,3 +123,4 @@ Format.pp_print_flush !std_fmt ();
 Format.pp_print_flush !err_fmt ();
 exit 0;;
 
+*)

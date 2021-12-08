@@ -23,9 +23,9 @@
 
 (* $Id$ *)
 
-open Misc
-open Parse_ast
+open Rml_misc
 open Parse_ident
+open Ppxlib
 
 let unbound_variable_err x loc =
   Format.fprintf !err_fmt

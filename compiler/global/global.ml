@@ -28,7 +28,7 @@
 
 (* $Id$ *)
 
-open Misc
+(*open Misc*)
 
 (* values in the symbol table *)
 
