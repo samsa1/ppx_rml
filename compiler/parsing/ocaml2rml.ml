@@ -337,13 +337,21 @@ and translate_expr expr =
 let sident_strlist_tdecl_of_tdecl ptype =
   let loc = ptype.ptype_loc in
   let sident = simple_ident_of_string_loc ptype.ptype_name in
-  if ptype.ptype_manifest <> None || ptype.ptype_params <> [] || ptype.ptype_cstrs <> []
-    || ptype.ptype_attributes <> [] || ptype.ptype_params <> []
+  if ptype.ptype_manifest <> None (*|| ptype.ptype_params <> []*) || ptype.ptype_cstrs <> []
+    || ptype.ptype_attributes <> [] || ptype.ptype_private <> Public
   then Location.raise_errorf ~loc "Unsupported type syntax";
   let tdecl = match ptype.ptype_kind with
     | Ptype_abstract -> Location.raise_errorf ~loc "Unimplemented in rml due to lack of exemples"
     | Ptype_variant const_declL ->
-        RmlPtype_variant (List.map (fun _ -> Location.raise_errorf ~loc "Unimplemented in rml due to lack of exemples") const_declL)
+        RmlPtype_variant (List.map (fun cstr_decl ->
+          let () = assert (cstr_decl.pcd_attributes = []) in
+          let () = assert (cstr_decl.pcd_res = None) in
+          (simple_ident_of_string_loc cstr_decl.pcd_name, 
+          match cstr_decl.pcd_args with
+          | Pcstr_tuple [] -> None
+          | Pcstr_tuple l -> Some ({pte_desc = RmlPtype_tuple (List.map translate_core_type l); pte_loc = cstr_decl.pcd_loc})
+          | Pcstr_record _ -> assert false
+          )) const_declL)
     | Ptype_record label_declL ->
         RmlPtype_record (List.map
                           (fun label_decl ->
@@ -352,7 +360,14 @@ let sident_strlist_tdecl_of_tdecl ptype =
                              translate_core_type label_decl.pld_type))
                           label_declL)
     | Ptype_open -> Location.raise_errorf ~loc "Unimplemented in rml due to lack of exemples"
-  in (sident, [], tdecl)
+  in let strlist = List.map (fun (ctype, (var, inj)) ->
+      if var <> NoVariance || inj <> NoInjectivity
+      then Location.raise_errorf ~loc "Variance and injectivity for types are not supported in rml"
+      else match ctype.ptyp_desc with
+        | Ptyp_var s -> s
+        | _ -> Location.raise_errorf ~loc:ctype.ptyp_loc "Such complex types are not supported in rml"
+      ) ptype.ptype_params
+  in (sident, strlist, tdecl)
 
 let impl_item_of_str_item stri =
   let loc = stri.pstr_loc in
