@@ -49,8 +49,16 @@ let rec translate_core_type ctype =
   | Ptyp_constr (lident, ctypel) ->
       begin match lident.txt, ctypel with
       | Lident "process", [] -> assert false 
-      | Lident "process", [ctype] -> RmlPtype_process (translate_core_type ctype, Def_static.Dontknow) 
+      | Lident "process", [ctype] -> RmlPtype_process (translate_core_type ctype, Def_static.Dontknow)
       | Lident "process", _ -> RmlPtype_process ({pte_desc = RmlPtype_tuple (List.map translate_core_type ctypel); pte_loc = lident.loc}, Def_static.Dontknow) 
+      | Lident "+", [{ptyp_desc = Ptyp_constr ({txt = Lident "process"; _}, [ctype2]);_}] ->
+        RmlPtype_process (translate_core_type ctype2, Def_static.Noninstantaneous)
+      | Lident "+", [{ptyp_desc = Ptyp_constr ({txt = Lident "process"; _}, ctypel2);_}] ->
+        RmlPtype_process ({pte_desc = RmlPtype_tuple (List.map translate_core_type ctypel2); pte_loc = lident.loc}, Def_static.Noninstantaneous)
+      | Lident "-", [{ptyp_desc = Ptyp_constr ({txt = Lident "process"; _}, [ctype2]);_}] ->
+        RmlPtype_process (translate_core_type ctype2, Def_static.Instantaneous)
+      | Lident "-", [{ptyp_desc = Ptyp_constr ({txt = Lident "process"; _}, ctypel2);_}] ->
+        RmlPtype_process ({pte_desc = RmlPtype_tuple (List.map translate_core_type ctypel2); pte_loc = lident.loc}, Def_static.Instantaneous)
       | _ -> RmlPtype_constr (ident_of_lident lident, List.map translate_core_type ctypel)
       end
   | Ptyp_object _ -> assert false
@@ -197,7 +205,7 @@ and translate_expr expr =
         | Lident "pause" -> Pexpr_pause
         | Lident "halt" -> Pexpr_halt
         | Lident "nothing" -> Pexpr_nothing
-        | Lident "emit" -> assert false
+        | Lident "emit" | Lident "process" -> assert false
         | _ -> Pexpr_ident (ident_of_lident longident_loc)
       end
     | Pexp_constant c ->
@@ -228,6 +236,7 @@ and translate_expr expr =
             | _ -> assert false
           end
         | _ -> Pexpr_apply (translate_expr expr, List.map (fun (al, expr) -> let () = assert (al = Nolabel) in translate_expr expr) arglabel_expr_list)
+        (* TODO implemented Pexpr_merge = expr |> expr *)
       end
     | Pexp_match (expr, cases) ->
       Pexpr_match (translate_expr expr, List.map pat_expop_exp_of_case cases)
@@ -238,14 +247,7 @@ and translate_expr expr =
         | ({txt = Lident "()"; _}, None) -> Pexpr_constant Const_unit
         | ({txt = Lident "true"; _}, None) -> Pexpr_constant (Const_bool true)
         | ({txt = Lident "false"; _}, None) -> Pexpr_constant (Const_bool false)
-        | ({txt = Lident "None"; _}, None) | ({txt = Lident "Some"; _}, Some _) 
-          | ({txt = Lident "::"; _}, Some _) ->
-          Pexpr_construct (ident_of_lident ident, translate_expropt expop)
-        | ({txt = Lident "[]"; _}, None) -> Pexpr_construct (ident_of_lident ident, None)
-        | _ -> let () = match ident.txt with
-            | Lident a -> print_endline a
-            | _ -> assert false
-            in assert false 
+        | _ -> Pexpr_construct (ident_of_lident ident, translate_expropt expop)
       end
     | Pexp_variant _ -> let () = assert false in Pexpr_ocaml expr
     | Pexp_record (name_expr_list, expop) ->
