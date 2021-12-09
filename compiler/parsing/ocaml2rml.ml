@@ -44,8 +44,9 @@ let ident_of_lident lident =
   in {pident_id; pident_loc = lident.loc}
 
 let rec translate_core_type ctype = 
+  let loc = ctype.ptyp_loc in
   let pte_desc = match ctype.ptyp_desc with
-  | Ptyp_any -> assert false
+  | Ptyp_any -> Location.raise_errorf ~loc "Unsupported in rml"
   | Ptyp_var str -> RmlPtype_var str
   | Ptyp_arrow (arg_label, ctype1, ctype2) ->
     let () = if arg_label <> Nolabel
@@ -54,7 +55,7 @@ let rec translate_core_type ctype =
   | Ptyp_tuple ctypel -> RmlPtype_tuple (List.map translate_core_type ctypel)
   | Ptyp_constr (lident, ctypel) ->
       begin match lident.txt, ctypel with
-      | Lident "process", [] -> assert false 
+      | Lident "process", [] -> Location.raise_errorf ~loc "Invalid type : 'a process is a valid type"
       | Lident "process", [ctype] -> RmlPtype_process (translate_core_type ctype, Def_static.Dontknow)
       | Lident "process", _ -> RmlPtype_process ({pte_desc = RmlPtype_tuple (List.map translate_core_type ctypel); pte_loc = lident.loc}, Def_static.Dontknow) 
       | Lident "+", [{ptyp_desc = Ptyp_constr ({txt = Lident "process"; _}, [ctype2]);_}] ->
@@ -107,7 +108,10 @@ let get_one_when ~loc expr = match expr.pexp_desc with
     begin
       match arglabel_expr_list with
         | [] -> assert false (* Should not happen *)
-        | [(label, expr)] -> let () = assert (label = Nolabel) in (One, expr, None)
+        | [(label, expr)] ->
+          let () = if label <> Nolabel
+          then Location.raise_errorf ~loc "Invalid syntax"
+          in (One, expr, None)
         | _ ->
             let event, when_expr = get_when ~loc arglabel_expr_list in
             (One, event, when_expr)
@@ -120,10 +124,14 @@ let get_imm_one_when expr = match expr.pexp_desc with
     begin
       match arglabel_expr_list with
         | [] -> assert false (* Should not happen *)
-        | [(label, expr)] -> let () = assert (label = Nolabel) in (Immediate, All, expr, None)
+        | [(label, expr)] ->
+            let () = if label <> Nolabel
+            then Location.raise_errorf ~loc:expr.pexp_loc "Invalid syntax"
+            in (Immediate, All, expr, None)
         | (label, expr2)::tl ->
-            let () = assert (label = Nolabel) in
-            let await_kind, event, when_expr = get_one_when ~loc:expr.pexp_loc {expr with pexp_desc = Pexp_apply (expr2, tl)} in
+            let () = if label <> Nolabel
+            then Location.raise_errorf ~loc:expr2.pexp_loc "Invalid syntax"
+            in let await_kind, event, when_expr = get_one_when ~loc:expr.pexp_loc {expr with pexp_desc = Pexp_apply (expr2, tl)} in
             (Immediate, await_kind, event, when_expr)
     end
   | _ -> 
@@ -159,8 +167,9 @@ let rec pat_expr_of_value_binding vb =
   let rec add_process expr =
     let pexpr_desc = match expr.pexp_desc with
       | Pexp_fun (arg_l, exprop, patt, expr) ->
-        let () = assert (arg_l = Nolabel && exprop = None) in
-        Pexpr_function [translate_patt patt, None, add_process expr]
+        let () = if arg_l <> Nolabel || exprop <> None
+          then Location.raise_errorf ~loc:expr.pexp_loc "Labelled arguments are not allowed in rml"
+        in Pexpr_function [translate_patt patt, None, add_process expr]
       | Pexp_constraint (expr, ctype) ->
         Pexpr_constraint (add_process expr, translate_core_type ctype)
       | _ -> Pexpr_process (translate_expr expr)
@@ -172,7 +181,7 @@ let rec pat_expr_of_value_binding vb =
   then
     let patt, new_expr = match vb.pvb_expr.pexp_desc with
       | Pexp_fun (Nolabel, None, patt, expr) -> (translate_patt patt, expr)
-      | _ -> assert false
+      | _ -> Location.raise_errorf ~loc:vb.pvb_expr.pexp_loc "Invalid syntax, expected process name"
     in (patt, add_process new_expr)
   else
   (translate_patt vb.pvb_pat,
@@ -195,24 +204,28 @@ and event_of_patt_ext_event patt = match patt.ppat_desc with
     event_of_expr expr None
   | Ppat_extension ({txt = "event"; _}, PStr [{pstr_desc = Pstr_value (Nonrecursive, [vb]); _}]) ->
     event_of_expr vb.pvb_expr (Some (translate_patt vb.pvb_pat))
-  | _ -> assert false
+  | _ ->
+    let (_message: string) = "Invalid syntax, expected [%event expr] or [%event let i = expr]"
+    in assert false
 and translate_expr expr =
+  let loc = expr.pexp_loc in
   let pexpr_desc = match expr.pexp_desc with
-    | Pexp_ident longident_loc ->
-      begin match longident_loc.txt with
+    | Pexp_ident lident ->
+      begin match lident.txt with
         | Lident "pause" -> Pexpr_pause
         | Lident "halt" -> Pexpr_halt
         | Lident "nothing" -> Pexpr_nothing
-        | Lident "emit" | Lident "process" -> assert false
-        | _ -> Pexpr_ident (ident_of_lident longident_loc)
+        | Lident "emit" | Lident "process" -> Location.raise_errorf ~loc:lident.loc "Reserved keyword" 
+        | _ -> Pexpr_ident (ident_of_lident lident)
       end
     | Pexp_constant c ->
-      Pexpr_constant (immediate_of_constant ~loc:expr.pexp_loc c)
+      Pexpr_constant (immediate_of_constant ~loc c)
     | Pexp_let (rf, vbl, expr) -> Pexpr_let (rf, List.map pat_expr_of_value_binding vbl, translate_expr expr)
     | Pexp_function cases -> Pexpr_function (List.map pat_expop_exp_of_case cases)
     | Pexp_fun (arg_l, exprop, patt, expr) ->
-        let () = assert (arg_l = Nolabel && exprop = None) in
-        Pexpr_function [translate_patt patt, None, translate_expr expr]
+        let () = if arg_l <> Nolabel || exprop <> None
+          then Location.raise_errorf ~loc "rml does not support labelled arguments"
+        in Pexpr_function [translate_patt patt, None, translate_expr expr]
     | Pexp_apply (expr, arglabel_expr_list) ->
       begin match expr.pexp_desc with
         | Pexp_ident {txt = Lident "emit"; _} ->
@@ -220,20 +233,21 @@ and translate_expr expr =
             | [] -> assert false (* should never happen *)
             | [(Nolabel, signal_expr)] -> Pexpr_emit (translate_expr signal_expr)
             | [(Nolabel, signal_expr); (Nolabel, info_expr)] -> Pexpr_emit_val (translate_expr signal_expr, translate_expr info_expr)
-            | _ -> assert false
+            | _::_::_::_ -> Location.raise_errorf ~loc "emit takes at most 2 arguments"
+            | _ -> Location.raise_errorf ~loc "emit only takes unlabelled arguments"
           end
         | Pexp_ident {txt = Lident "run"; _} ->
           begin match arglabel_expr_list with
             | [] -> assert false (* should never happen *)
             | [(Nolabel, proc)] -> Pexpr_run (translate_expr proc)
-            | _ -> assert false
+            | _ -> Location.raise_errorf  ~loc "run requires single unlabelled argument"
           end
         | Pexp_ident {txt = Lident "||"; _} ->
           begin match arglabel_expr_list with
             | [(Nolabel, e1); (Nolabel, e2)] -> Pexpr_par (translate_expr e1, translate_expr e2)
-            | _ -> assert false
+            | _ -> Location.raise_errorf ~loc "|| is a syntax operator that takes exactly 2 arguments"
           end
-        | _ -> Pexpr_apply (translate_expr expr, List.map (fun (al, expr) -> let () = assert (al = Nolabel) in translate_expr expr) arglabel_expr_list)
+        | _ -> Pexpr_apply (translate_expr expr, List.map (fun (al, expr) -> let () = if al <> Nolabel then Location.raise_errorf ~loc "Labelled arguments are not supported in rml" in translate_expr expr) arglabel_expr_list)
         (* TODO implemented Pexpr_merge = expr |> expr *)
       end
     | Pexp_match (expr, cases) ->
@@ -247,7 +261,6 @@ and translate_expr expr =
         | ({txt = Lident "false"; _}, None) -> Pexpr_constant (Const_bool false)
         | _ -> Pexpr_construct (ident_of_lident ident, translate_expropt expop)
       end
-    | Pexp_variant _ -> let () = assert false in Pexpr_ocaml expr
     | Pexp_record (name_expr_list, expop) ->
       let ident_expr_list = List.map (fun (name, expr) -> (ident_of_lident name, translate_expr expr)) name_expr_list in
       begin match expop with
@@ -263,21 +276,11 @@ and translate_expr expr =
     | Pexp_while (cond, block) -> Pexpr_while (translate_expr cond, translate_expr block)
     | Pexp_for (pat, expr1, expr2, dir, expr3) -> Pexpr_for (simple_ident_of_pat pat, translate_expr expr1, translate_expr expr2, dir, translate_expr expr3)
     | Pexp_constraint (expr, ctype) -> Pexpr_constraint (translate_expr expr, translate_core_type ctype)
-    | Pexp_coerce _ -> let () = assert false in Pexpr_ocaml expr
-    | Pexp_send _ -> let () = assert false in Pexpr_ocaml expr
-    | Pexp_new _ -> let () = assert false in Pexpr_ocaml expr
-    | Pexp_setinstvar _ -> let () = assert false in Pexpr_ocaml expr
-    | Pexp_override _ -> let () = assert false in Pexpr_ocaml expr
-    | Pexp_letmodule _ -> let () = assert false in Pexpr_ocaml expr
-    | Pexp_letexception _ -> let () = assert false in Pexpr_ocaml expr
     | Pexp_assert expr -> Pexpr_assert (translate_expr expr)
-    | Pexp_lazy expr -> let () = assert false in Pexpr_ocaml expr
-    | Pexp_poly _ -> let () = assert false in Pexpr_ocaml expr
-    | Pexp_object _ -> let () = assert false in Pexpr_ocaml expr
-    | Pexp_newtype _ -> let () = assert false in Pexpr_ocaml expr
-    | Pexp_pack _ -> let () = assert false in Pexpr_ocaml expr
-    | Pexp_open _ -> let () = assert false in Pexpr_ocaml expr
-    | Pexp_letop _ -> let () = assert false in Pexpr_ocaml expr
+    | Pexp_variant _ | Pexp_coerce _ | Pexp_send _ | Pexp_new _ | Pexp_setinstvar _ 
+    | Pexp_override _ | Pexp_letmodule _ | Pexp_letexception _ | Pexp_lazy _ | Pexp_poly _ 
+    | Pexp_object _ | Pexp_newtype _ | Pexp_pack _ | Pexp_open _ | Pexp_letop _ | Pexp_unreachable ->
+        Location.raise_errorf ~loc "Unsupported OCaml expression"
     | Pexp_extension (name, payload) -> begin
       match name.txt, payload with
         | "para", PStr [stri] | "par", PStr [stri] -> begin
@@ -328,22 +331,21 @@ and translate_expr expr =
                 List.map (fun case -> (event_of_patt_ext_event case.pc_lhs, translate_expropt case.pc_guard, Some (translate_expr case.pc_rhs))) cases)
             | _ -> assert false
           end
-        | _, _ -> let () = print_endline ("extension "^name.txt^" not implemented") in assert false
+        | "until", _ | "signal", _ | "await", _ | "para", _ | "par", _ -> Location.raise_errorf ~loc "Invalid extension payload" 
+        | _, _ -> Location.raise_errorf ~loc:name.loc "extension %s is not supported" name.txt
       end
-    | Pexp_unreachable -> let () = assert false in Pexpr_ocaml expr
   in {pexpr_desc; pexpr_loc = expr.pexp_loc}
 
 let sident_strlist_tdecl_of_tdecl ptype =
+  let loc = ptype.ptype_loc in
   let sident = simple_ident_of_string_loc ptype.ptype_name in
-  let () = assert (ptype.ptype_manifest = None) in
-  let () = assert (ptype.ptype_params = []) in
-  let () = assert (ptype.ptype_cstrs = []) in
-  let () = assert (ptype.ptype_attributes = []) in
-  let () = assert (ptype.ptype_params = []) in
+  if ptype.ptype_manifest <> None || ptype.ptype_params <> [] || ptype.ptype_cstrs <> []
+    || ptype.ptype_attributes <> [] || ptype.ptype_params <> []
+  then Location.raise_errorf ~loc "Unsupported type syntax";
   let tdecl = match ptype.ptype_kind with
-    | Ptype_abstract -> assert false
+    | Ptype_abstract -> Location.raise_errorf ~loc "Unimplemented in rml due to lack of exemples"
     | Ptype_variant const_declL ->
-        RmlPtype_variant (List.map (fun _ -> assert false) const_declL)
+        RmlPtype_variant (List.map (fun _ -> Location.raise_errorf ~loc "Unimplemented in rml due to lack of exemples") const_declL)
     | Ptype_record label_declL ->
         RmlPtype_record (List.map
                           (fun label_decl ->
@@ -351,32 +353,24 @@ let sident_strlist_tdecl_of_tdecl ptype =
                              label_decl.pld_mutable,
                              translate_core_type label_decl.pld_type))
                           label_declL)
-    | Ptype_open -> assert false
+    | Ptype_open -> Location.raise_errorf ~loc "Unimplemented in rml due to lack of exemples"
   in (sident, [], tdecl)
 
 let impl_item_of_str_item stri =
+  let loc = stri.pstr_loc in
   let pimpl_desc = match stri.pstr_desc with
     | Pstr_eval (expr, attributes) ->
-      let () = assert ([] = attributes) in
-      Pimpl_expr (translate_expr expr)
+      let () = if attributes <> []
+        then Location.raise_errorf ~loc "Attributes are not implemented for structure elements"
+      in Pimpl_expr (translate_expr expr)
     | Pstr_value (rec_flag, vbs) ->
       Pimpl_let (rec_flag, List.map pat_expr_of_value_binding vbs)
-    | Pstr_primitive _value_description -> assert false
     | Pstr_type (_, type_declaration_list) ->
         Pimpl_type (List.map sident_strlist_tdecl_of_tdecl type_declaration_list)
-    | Pstr_typext _type_extension -> assert false
-    | Pstr_exception _type_exception -> assert false
-    | Pstr_module _module_binding -> assert false
-    | Pstr_recmodule _module_binding_list -> assert false
-    | Pstr_modtype _module_type_declaration -> assert false
-    | Pstr_open _open_declaration -> assert false
-    | Pstr_class _class_declaration_list -> assert false
-    | Pstr_class_type _class_type_declaration_list -> assert false
-    | Pstr_include _include_declaration -> assert false
-    | Pstr_attribute _attribute -> assert false
     | Pstr_extension ((name, payload), attributes) ->
-        let () = assert (attributes = []) in
-        begin match (name.txt, payload) with
+        let () = if attributes <> []
+        then Location.raise_errorf ~loc "Attributes are not supported in rml"
+        in begin match (name.txt, payload) with
           | "para", PStr [stri] | "par", PStr [stri] ->
             begin match stri.pstr_desc with
               | Pstr_eval _ -> assert false
@@ -401,8 +395,11 @@ let impl_item_of_str_item stri =
             end 
           | _, _ -> assert false
         end
-
-  in {pimpl_desc; pimpl_loc = stri.pstr_loc}
+    | Pstr_primitive _ | Pstr_typext _ | Pstr_exception _ | Pstr_module _
+    | Pstr_recmodule _ | Pstr_modtype _ | Pstr_open _ | Pstr_class _
+    | Pstr_class_type _ | Pstr_include _ | Pstr_attribute _ ->
+      Location.raise_errorf ~loc "Unimplemented in rml"
+    in {pimpl_desc; pimpl_loc = stri.pstr_loc}
   
 
 let main ~loc:_ ~path:_ str_item_list =
