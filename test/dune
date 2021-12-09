@@ -24,7 +24,7 @@
 (test
  (name test2)
  (modules test2)
- (deps test2b.ml )
+ (deps test1b.ml test2b.ml test3b.ml)
  (preprocess (pps rmlc))
   (action (progn
     (run ./build.sh test1b.ml test1.exe)

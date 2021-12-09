@@ -6,45 +6,51 @@ open Rml_asttypes
 let simple_ident_of_string_loc str =
     {psimple_id = str.txt; psimple_loc = str.loc}
 
-let immediate_of_constant = function
+let immediate_of_constant ~loc = function
   | Pconst_integer (str, char_op) -> begin 
-      assert (char_op = None);
-      Const_int (int_of_string str)
+      let () = if char_op <> None
+        then Location.raise_errorf ~loc "Character at the end of an integer are not supported"
+      in Const_int (int_of_string str)
   end
   | Pconst_char c -> Const_char c
-  | Pconst_string (s, _, sop) ->
-    let () = assert (sop = None) in Const_string s
+  | Pconst_string (s, loc, sop) ->
+    let () = if sop <> None
+      then Location.raise_errorf ~loc "Unsupported expression"
+    in Const_string s
   | Pconst_float (s, char_op) -> begin
-      assert (char_op = None);
-      Const_float (float_of_string s)
+      let () = if char_op <> None
+        then Location.raise_errorf ~loc "Character at the end of a float are not supported"
+      in Const_float (float_of_string s)
   end
 
 let simple_ident_of_pat patt =
   let aux = function
     | Ppat_var s -> s.txt
-    | _ -> assert false
+    | _ -> Location.raise_errorf ~loc:patt.ppat_loc "Invalid syntax"
   in {psimple_loc = patt.ppat_loc; psimple_id = aux patt.ppat_desc}
 
 let sident_typeoptL_of_patt patt =
   match patt.ppat_desc with
     | Ppat_var str -> [simple_ident_of_string_loc str, None]
     | Ppat_tuple pattl -> List.map (fun patt -> (simple_ident_of_pat patt, None)) pattl
-    | _ -> assert false
+    | _ -> Location.raise_errorf ~loc:patt.ppat_loc "Invalid syntax"
 
 let ident_of_lident lident = 
-  let aux = function
+  let pident_id = match lident.txt with
     | Lident s -> Pident s
     | Ldot (Lident s1, s2) -> Pdot (s1, s2)
-    | Ldot _ -> assert false
-    | Lapply (_, _) -> assert false
-  in {pident_id = aux lident.txt; pident_loc = lident.loc}
+    | Ldot _ -> Location.raise_errorf ~loc:lident.loc "Invalid syntax"
+    | Lapply (_, _) -> Location.raise_errorf ~loc:lident.loc "Invalid syntax"
+  in {pident_id; pident_loc = lident.loc}
 
 let rec translate_core_type ctype = 
   let pte_desc = match ctype.ptyp_desc with
   | Ptyp_any -> assert false
   | Ptyp_var str -> RmlPtype_var str
   | Ptyp_arrow (arg_label, ctype1, ctype2) ->
-      let () = assert (arg_label = Nolabel) in RmlPtype_arrow (translate_core_type ctype1, translate_core_type ctype2)
+    let () = if arg_label <> Nolabel
+      then Location.raise_errorf ~loc:ctype.ptyp_loc "Labelled functions are not supported in rml"  
+    in RmlPtype_arrow (translate_core_type ctype1, translate_core_type ctype2)
   | Ptyp_tuple ctypel -> RmlPtype_tuple (List.map translate_core_type ctypel)
   | Ptyp_constr (lident, ctypel) ->
       begin match lident.txt, ctypel with
@@ -61,13 +67,9 @@ let rec translate_core_type ctype =
         RmlPtype_process ({pte_desc = RmlPtype_tuple (List.map translate_core_type ctypel2); pte_loc = lident.loc}, Def_static.Instantaneous)
       | _ -> RmlPtype_constr (ident_of_lident lident, List.map translate_core_type ctypel)
       end
-  | Ptyp_object _ -> assert false
-  | Ptyp_class _ -> assert false
-  | Ptyp_alias _ -> assert false
-  | Ptyp_variant _ -> assert false
-  | Ptyp_poly _ -> assert false
-  | Ptyp_package _ -> assert false
-  | Ptyp_extension _ -> assert false
+  | Ptyp_object _ | Ptyp_class _ | Ptyp_alias _ | Ptyp_variant _
+  | Ptyp_poly _ | Ptyp_package _ | Ptyp_extension _ ->
+    Location.raise_errorf ~loc:ctype.ptyp_loc "Unsupported type in rml"
   in {pte_desc; pte_loc = ctype.ptyp_loc}
 
 let get_immediate expr = match expr.pexp_desc with
@@ -75,38 +77,39 @@ let get_immediate expr = match expr.pexp_desc with
     (Immediate,
     match arglabel_expr_list with
       | [] -> assert false (* Should not happen *)
-      | [(label, expr)] -> let () = assert (label = Nolabel) in expr
-      | (label, expr2)::tl -> let () = assert (label = Nolabel) in {expr with pexp_desc = Pexp_apply (expr2, tl)}
+      | [(Nolabel, expr)] -> expr
+      | (Nolabel, expr2)::tl -> {expr with pexp_desc = Pexp_apply (expr2, tl)}
+      | (_, {pexp_loc; _})::_ -> Location.raise_errorf ~loc:pexp_loc "Labelled arguments are not allowed in rml"
     )
   | _ -> (Nonimmediate, expr)
 
-let get_when exprl =
-  let expr_of_exprl = function
-    | [] -> assert false
+let get_when ~loc exprl =
+  let expr_of_exprl ~loc = function
+    | [] -> Location.raise_errorf ~loc "Expected expression on both sides of then when operator"
     | [(Nolabel, expr)] -> expr
     | (Nolabel, expr)::tl ->
         {pexp_desc = Pexp_apply (expr, tl); pexp_loc = expr.pexp_loc;
         pexp_attributes = []; pexp_loc_stack = []}
-    | _ -> assert false
+    | (_, {pexp_loc; _})::_ -> Location.raise_errorf ~loc:pexp_loc "Labelled arguments are not allowed in rml"
   in let rec get_when_inner = function
     | [] -> ([], None)
     | (Nolabel, {pexp_desc = Pexp_ident {txt = Lident "when"; _}; _})::tl ->
-        ([], Some (expr_of_exprl tl))
+        ([], Some (expr_of_exprl ~loc tl))
     | element::tl ->
       let (v, s) = get_when_inner tl in
       (element::v , s)
   in
   let (eventl, when_expr) = get_when_inner exprl in
-  (expr_of_exprl eventl, when_expr)
+  (expr_of_exprl ~loc eventl, when_expr)
 
-let get_one_when expr = match expr.pexp_desc with
+let get_one_when ~loc expr = match expr.pexp_desc with
   | Pexp_apply ({pexp_desc = Pexp_ident {txt = Lident "one"; _}; _}, arglabel_expr_list) ->
     begin
       match arglabel_expr_list with
         | [] -> assert false (* Should not happen *)
         | [(label, expr)] -> let () = assert (label = Nolabel) in (One, expr, None)
         | _ ->
-            let event, when_expr = get_when arglabel_expr_list in
+            let event, when_expr = get_when ~loc arglabel_expr_list in
             (One, event, when_expr)
     end
   | _ -> (All, expr, None)
@@ -120,11 +123,11 @@ let get_imm_one_when expr = match expr.pexp_desc with
         | [(label, expr)] -> let () = assert (label = Nolabel) in (Immediate, All, expr, None)
         | (label, expr2)::tl ->
             let () = assert (label = Nolabel) in
-            let await_kind, event, when_expr = get_one_when {expr with pexp_desc = Pexp_apply (expr2, tl)} in
+            let await_kind, event, when_expr = get_one_when ~loc:expr.pexp_loc {expr with pexp_desc = Pexp_apply (expr2, tl)} in
             (Immediate, await_kind, event, when_expr)
     end
   | _ -> 
-    let await_kind, event, when_expr = get_one_when expr in
+    let await_kind, event, when_expr = get_one_when ~loc:expr.pexp_loc expr in
   (Nonimmediate, await_kind, event, when_expr)
 
 let rec translate_patt patt =
@@ -132,8 +135,7 @@ let rec translate_patt patt =
     | Ppat_any -> Ppatt_any
     | Ppat_var str -> Ppatt_var (simple_ident_of_string_loc str)
     | Ppat_alias (patt, name) -> Ppatt_alias (translate_patt patt, simple_ident_of_string_loc name)
-    | Ppat_constant c -> Ppatt_constant (immediate_of_constant c)
-    | Ppat_interval (_c1, _c2) -> assert false
+    | Ppat_constant c -> Ppatt_constant (immediate_of_constant ~loc:patt.ppat_loc c)
     | Ppat_tuple pattl -> Ppatt_tuple (List.map translate_patt pattl)
     | Ppat_construct (lident, namel_patt_opt) ->
       begin match (lident.txt, namel_patt_opt) with
@@ -143,18 +145,14 @@ let rec translate_patt patt =
         | (_, None) -> Ppatt_construct (ident_of_lident lident, None)
         | (_, Some p) -> Ppatt_construct (ident_of_lident lident, Some (translate_patt p))
       end
-    | Ppat_variant (_label, _patt_op) -> assert false
     | Ppat_record (lident_patt_l, Closed) -> Ppatt_record (List.map (fun (lident, patt) -> (ident_of_lident lident, translate_patt patt)) lident_patt_l)
-    | Ppat_record (_lident_patt_l, Open) -> assert false
+    | Ppat_record (_lident_patt_l, Open) -> Location.raise_errorf ~loc:patt.ppat_loc "Unsupported opened record in rml"
     | Ppat_array pattl -> Ppatt_array (List.map translate_patt pattl)
     | Ppat_or (patt1, patt2) -> Ppatt_or (translate_patt patt1, translate_patt patt2)
     | Ppat_constraint (patt, ctype) -> Ppatt_constraint (translate_patt patt, translate_core_type ctype)
-    | Ppat_type _lident -> assert false
-    | Ppat_lazy _patt -> assert false
-    | Ppat_unpack _str_op -> assert false
-    | Ppat_exception _patt -> assert false
-    | Ppat_extension _ext -> assert false
-    | Ppat_open (_lident, _patt) -> assert false
+    | Ppat_interval _ | Ppat_variant _ | Ppat_type _ | Ppat_lazy _
+    | Ppat_unpack _ | Ppat_exception _ | Ppat_extension _ | Ppat_open _ ->
+      Location.raise_errorf ~loc:patt.ppat_loc "Unsupported pattern in rml"
   in {ppatt_desc; ppatt_loc = patt.ppat_loc}
 
 let rec pat_expr_of_value_binding vb =
@@ -209,7 +207,7 @@ and translate_expr expr =
         | _ -> Pexpr_ident (ident_of_lident longident_loc)
       end
     | Pexp_constant c ->
-      Pexpr_constant (immediate_of_constant c)
+      Pexpr_constant (immediate_of_constant ~loc:expr.pexp_loc c)
     | Pexp_let (rf, vbl, expr) -> Pexpr_let (rf, List.map pat_expr_of_value_binding vbl, translate_expr expr)
     | Pexp_function cases -> Pexpr_function (List.map pat_expop_exp_of_case cases)
     | Pexp_fun (arg_l, exprop, patt, expr) ->
