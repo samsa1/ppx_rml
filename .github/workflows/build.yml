@@ -12,7 +12,7 @@ jobs:
       fail-fast: false
       matrix:
         ocaml-compiler:
-          - 4.12.0
+          - 4.13.1
 
     steps:
       - name: Install external dependencies
@@ -42,12 +42,8 @@ jobs:
 
       - name: Install ReactiveML
         run: |
-          ./configure --prefix $HOME/.local
           make
-          make install
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Build all examples
         run: |
-          cd examples
-          make
+          make test
