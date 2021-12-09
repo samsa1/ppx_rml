@@ -32,7 +32,7 @@ jobs:
         run: |
           eval $(opam env)
           opam update
-          opam install -y ocamlfind graphics num
+          opam install -y ocamlfind graphics num dune ppxlib
           echo "OPAM_SWITCH_PREFIX=$OPAM_SWITCH_PREFIX" >> $GITHUB_ENV
           echo "CAML_LD_LIBRARY_PATH=$CAML_LD_LIBRARY_PATH" >> $GITHUB_ENV
           echo "OCAML_TOPLEVEL_PATH=$OCAML_TOPLEVEL_PATH" >> $GITHUB_ENV
