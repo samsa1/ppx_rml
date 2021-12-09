@@ -29,5 +29,6 @@
   (action (progn
     (run ./build.sh test1b.ml test1.exe)
     (run ./build.sh test2b.ml test2.exe)
-    (run ./build.sh test3b.ml test3.exe)))
-)
+    (run ./build.sh test3b.ml test3.exe)
+    (run ./build.sh test4.ml test4.exe)
+)))
