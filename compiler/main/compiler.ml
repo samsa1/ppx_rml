@@ -228,12 +228,18 @@ let compile_implementation_back_end_buf info_fmt module_name rml_table =
     (Print_caml_src.output_impl_decl_string module_name)
     (List.rev !caml_table)
 
-let compile_implementation_back_end info_chan out_chan module_name rml_table =
+let compile_implementation_back_end_str info_chan out_chan module_name rml_table =
   let strings = compile_implementation_back_end_buf info_chan module_name rml_table in
   List.iter (Buffer.add_string out_chan) strings
 
+let compile_implementation_back_end_print info_chan out_chan module_name rml_table =
+  let strings = compile_implementation_back_end_buf info_chan module_name rml_table in
+  List.iter (output_string out_chan) strings
+  
+
+
 (* the main functions *)
-let compile_implementation ~loc ~path ocaml_ast =
+let translate_implementation ~loc ~path ocaml_ast =
   (* input and output files *)
   let filename = "main" in
   let obj_interf_name = make_output_filename (filename ^ ".rzi")
@@ -297,7 +303,7 @@ let compile_implementation ~loc ~path ocaml_ast =
   Buffer.add_string out_chan ("open "^ !interpreter_impl ^";;\n");
 
         (* the implementation *)
-	compile_implementation_back_end info_fmt out_chan
+	compile_implementation_back_end_str info_fmt out_chan
 	  module_name intermediate_code;
 
         (* main process *)
@@ -362,7 +368,129 @@ let compile_implementation ~loc ~path ocaml_ast =
       (*close_in ic;*)
       raise x
 
-(*
+(* the main functions *)
+let compile_implementation _module_name filename =
+  (* input and output files *)
+  let source_name = filename ^ ".rml"
+  and obj_interf_name = make_output_filename (filename ^ ".rzi")
+  and obj_name = make_output_filename (filename ^ ".ml")
+  and tannot_name = make_output_filename (filename ^ ".tannot")
+  and sannot_name = make_output_filename (filename ^ ".sannot")
+  and module_name = String.capitalize_ascii (Filename.basename filename)  in
+
+  let ic = open_in source_name in
+  let itf =
+    if Sys.file_exists (filename^".rmli")
+    then None
+    else Some (open_out_bin obj_interf_name)
+  in
+  let info_fmt = !Rml_misc.std_fmt in
+
+  try
+(*    Front_end_timer.start();*)
+
+    (* load predefined base types *)
+    Modules.start_compiling_interface module_name;
+    Initialization.load_initial_modules ();
+
+    let lexbuf = Lexing.from_channel ic in
+    Location.init lexbuf source_name;
+
+    (* parsing of the file *)
+    Parse_timer.start();
+    let decl_list = Rml_parse.implementation lexbuf in
+    Parse_timer.time();
+
+    (* expend externals *)
+    External_timer.start();
+    let decl_list = List.map External.expend decl_list in
+    External_timer.time();
+
+    (* front-end *)
+    let intermediate_code =
+      compile_implementation_front_end info_fmt filename itf decl_list
+    in
+    Rml_misc.opt_iter close_out itf;
+
+    if Sys.file_exists (filename ^ ".rmli")
+       ||  Sys.file_exists (filename ^ ".mli")
+    then ()
+    else Typing.check_nongen_values intermediate_code;
+
+(*    Front_end_timer.time ();*)
+
+    (* back-end *)
+    if not !no_link then
+      begin
+(*	Back_end_timer.start ();*)
+
+	let out_chan = open_out obj_name in
+	output_string out_chan
+	  ("(* THIS FILE IS GENERATED. *)\n"^
+	   "(* "^(Array.fold_right (fun s cmd -> s^" "^cmd) Sys.argv " ")^
+	   "*)\n\n");
+        (* selection of the interpreter *)
+	output_string out_chan ("open "^ !interpreter_impl ^";;\n");
+
+        (* the implementation *)
+	compile_implementation_back_end_print info_fmt out_chan
+	  module_name intermediate_code;
+
+        (* main process *)
+	if !simulation_process <> "" then
+	  begin
+	    let main =
+	      try
+		Modules.pfind_value_desc
+		  (Parse_ident.Pident !simulation_process)
+	      with Modules.Desc_not_found ->
+		unbound_main !simulation_process
+	    in
+ 	    if not (Typing.is_unit_process (Global.info main)) then
+	      bad_type_main !simulation_process (Global.info main);
+	    let main_id = Rml_ident.name main.Global.gi.Global_ident.id in
+            let boi_hook =
+              "["^
+              (if !number_of_instant >= 0 then
+                "Rml_machine_hook.n_hook "^
+                (string_of_int !number_of_instant)^"; "
+              else "")^
+              (if !sampling >= 0.0 then
+                "Rml_machine_hook_unix.sampling_hook "^
+                (string_of_float !sampling)^"; "
+              else "")^
+              (if !with_debug then
+                "Rml_machine_hook.debug_hook;"
+              else "")^
+              (if !with_thread then
+                "Rml_async_body.boi_hook; "
+              else "")^
+              "] "
+            in
+	    output_string out_chan
+	      ("let _ = "^(!Rml_misc.rml_machine_module)^".rml_exec "^
+               boi_hook^
+               main_id^"\n")
+	  end;
+	close_out out_chan;
+(*	Back_end_timer.time()*)
+
+      end;
+
+   (* write types annotation *)
+    Rml_annot.Stypes.dump tannot_name;
+    Rml_annot.Sstatic.dump sannot_name;
+
+    close_in ic;
+  with
+    x ->
+      Rml_annot.Stypes.dump tannot_name;
+      Rml_annot.Sstatic.dump sannot_name;
+      close_in ic;
+      raise x
+
+
+
 (* compiling an interface *)
 (* front-end *)
 let compile_interface_front_end info_fmt itf intf_list =
@@ -431,7 +559,7 @@ let compile_interface_back_end info_fmt out_chan module_name rml_table =
 
 
 (* the main functions *)
-let compile_interface parse module_name filename filename_end =
+let compile_interface parse _module_name filename filename_end =
   (* input and output files *)
   let source_name = filename ^ filename_end
   and obj_interf_name = make_output_filename (filename ^ ".rzi")
@@ -483,11 +611,9 @@ let compile_interface parse module_name filename filename_end =
 let compile_scalar_interface module_name filename =
   let no_link_save = !no_link in
   no_link := true;
-  compile_interface Parse.interface module_name filename ".mli";
+  compile_interface Rml_parse.interface module_name filename ".mli";
   no_link := no_link_save
 
 (* compiling a ReactiveML interface *)
 let compile_interface module_name filename =
-  compile_interface Parse.interface module_name filename ".rmli"
-
-*)
+  compile_interface Rml_parse.interface module_name filename ".rmli"

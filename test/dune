@@ -1,7 +1,7 @@
 (executable
  (name pp)
  (modules pp)
- (libraries rmlc ppxlib))
+ (libraries ppx_rml ppxlib))
 
 
 (rule (targets test1b.ml) (deps (file test1.ml)) (action (run ./pp.exe --impl %{deps} -o %{targets})))
@@ -13,7 +13,7 @@
  (name test2)
  (modules test2)
  (deps test1b.ml test2b.ml test3b.ml test4b.ml)
- (preprocess (pps rmlc))
+ (preprocess (pps ppx_rml))
   (action (progn
     (run ./build.sh test1b.ml test1.exe)
     (run ./build.sh test2b.ml test2.exe)

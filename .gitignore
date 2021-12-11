@@ -31,10 +31,8 @@ rmltop_alt
 # Other generated files (specific to ReactiveML)
 config
 Makefile.common
-compiler/global/version.ml
 compiler/global/rzi.ml
 compiler/parsing/lexer.ml
-compiler/parsing/linenum.ml
 compiler/parsing/parser.ml
 compiler/parsing/parser.mli
 tools/rmlbuild/rmlbuild/boot/

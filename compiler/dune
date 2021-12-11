@@ -1,8 +1,10 @@
+(rule (target ppx_rml.ml) (action (copy main/ppx_rml.ml ppx_rml.ml)))
 (rule (target rmlc.ml) (action (copy main/rmlc.ml rmlc.ml)))
 (rule (target compiler.ml) (action (copy main/compiler.ml compiler.ml)))
 (rule (target rml_errors.ml) (action (copy main/rml_errors.ml rml_errors.ml)))
 (rule (target options.ml) (action (copy main/options.ml options.ml)))
 (rule (target configure.ml) (action (copy main/configure.ml configure.ml)))
+(rule (target interactive.ml) (action (copy main/interactive.ml interactive.ml)))
 
 (rule (target rml_misc.ml) (action (copy global/rml_misc.ml rml_misc.ml)))
 (rule (target version.ml) (action (copy global/version.ml version.ml)))
@@ -36,6 +38,9 @@
 (rule (target rml_syntaxerr.ml) (action (copy parsing/rml_syntaxerr.ml rml_syntaxerr.ml)))
 (rule (target parse_printer.ml) (action (copy parsing/parse_printer.ml parse_printer.ml)))
 (rule (target rml_location.ml) (action (copy parsing/rml_location.ml rml_location.ml)))
+(rule (target rml_parse.ml) (action (copy parsing/rml_parse.ml rml_parse.ml)))
+(rule (target rml_parser.mly) (action (copy parsing/rml_parser.mly rml_parser.mly)))
+(rule (target rml_lexer.mll) (action (copy parsing/rml_lexer.mll rml_lexer.mll)))
 
 (rule (target binding_errors.ml) (action (copy reac/binding_errors.ml binding_errors.ml)))
 (rule (target parse2reac.ml) (action (copy reac/parse2reac.ml parse2reac.ml)))
@@ -68,16 +73,35 @@
 (rule (target lucky.ml) (action (copy external/lucky.ml lucky.ml)))
 (rule (target lucky_errors.ml) (action (copy external/lucky_errors.ml lucky_errors.ml)))
 
-(rule (target rml_ident.cmo) (action (run ocamlc -c rml_ident.ml)))
-(rule (target global_ident.cmo) (deps rml_ident.cmo) (action (run ocamlc -c global_ident.ml)))
-(rule (target global.cmo) (deps global_ident.cmo) (action (run ocamlc -c global.ml)))
-(rule (target def_types.cmo) (deps global.cmo) (action (run ocamlc  -c def_types.ml)))
-(rule (target def_modules.cmo) (deps def_types.cmo) (action (run ocamlc -c def_modules.ml)))
+(ocamllex
+ (modules rml_lexer))
 
+(menhir
+ (modules rml_parser))
 
 (library
- (name rmlc)
+ (name inside_rml)
+ (libraries ppxlib)
+ (modules rml_misc version options configure
+  rml_errors rml_syntaxerr rml_warnings compiler parse_printer parse_ast rml_asttypes parse_ident
+  def_static parse2reac global global_ident rml_ident binding_errors reac_ast def_types reac_misc
+  rml_types reactivity_effects types_printer modules def_modules rzi symbol_table reac2reac
+  reac_optimization rml_location initialization static static_errors typing typing_errors rml_annot
+  static_printer instantaneous_loop reactivity_check wf_rec reac2lk lk_ast lk2caml lk_misc external
+  reac2lco lco_ast lco2caml lco_misc print_caml_src caml_ast caml_misc caml2caml ocaml2rml lucky
+  lucky_errors rml_parse rml_lexer rml_parser interactive)
+)
+
+(library
+ (name ppx_rml)
  (wrapped false)
  (kind ppx_rewriter)
- (libraries ppxlib)
+ (libraries ppxlib inside_rml)
+ (modules ppx_rml)
  (preprocess (pps ppxlib.metaquot)))
+
+(executables
+ (names rmlc)
+ (modules rmlc)
+ (libraries ppxlib inside_rml)
+)
