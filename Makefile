@@ -4,9 +4,14 @@ build:
 	echo "rzi.ml written"
 	(cd compiler && dune build)
 
-test : build
-	(cd test && dune runtest)
+test: build
+	dune runtest
 
+install: build
+	dune install
+
+uninstall:
+	dune uninstall
 
 clean:
 	dune clean

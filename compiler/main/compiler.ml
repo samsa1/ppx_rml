@@ -300,6 +300,7 @@ let translate_implementation ~loc ~path ocaml_ast =
 	   "(* "^(Array.fold_right (fun s cmd -> s^" "^cmd) Sys.argv " ")^
 	   "*)\n\n");
         (* selection of the interpreter *)
+  Buffer.add_string out_chan ("open Rmllib;;\n");
   Buffer.add_string out_chan ("open "^ !interpreter_impl ^";;\n");
 
         (* the implementation *)

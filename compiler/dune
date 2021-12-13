@@ -82,15 +82,7 @@
 (library
  (name inside_rml)
  (libraries ppxlib)
- (modules rml_misc version options configure
-  rml_errors rml_syntaxerr rml_warnings compiler parse_printer parse_ast rml_asttypes parse_ident
-  def_static parse2reac global global_ident rml_ident binding_errors reac_ast def_types reac_misc
-  rml_types reactivity_effects types_printer modules def_modules rzi symbol_table reac2reac
-  reac_optimization rml_location initialization static static_errors typing typing_errors rml_annot
-  static_printer instantaneous_loop reactivity_check wf_rec reac2lk lk_ast lk2caml lk_misc external
-  reac2lco lco_ast lco2caml lco_misc print_caml_src caml_ast caml_misc caml2caml ocaml2rml lucky
-  lucky_errors rml_parse rml_lexer rml_parser interactive)
-)
+ (modules :standard \ ppx_rml rmlc))
 
 (library
  (name ppx_rml)
@@ -105,3 +97,11 @@
  (modules rmlc)
  (libraries ppxlib inside_rml)
 )
+
+(install
+  (files ppx_rml.a)
+  (section lib))
+
+(install
+  (files rmlc.exe)
+  (section bin))

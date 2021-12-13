@@ -1,22 +1,25 @@
-(executable
- (name pp)
- (modules pp)
- (libraries ppx_rml ppxlib))
-
-
-(rule (targets test1b.ml) (deps (file test1.ml)) (action (run ./pp.exe --impl %{deps} -o %{targets})))
-(rule (targets test2b.ml) (deps (file test2.ml)) (action (run ./pp.exe --impl %{deps} -o %{targets})))
-(rule (targets test3b.ml) (deps (file test3.ml)) (action (run ./pp.exe --impl %{deps} -o %{targets})))
-(rule (targets test4b.ml) (deps (file test4.ml)) (action (run ./pp.exe --impl %{deps} -o %{targets})))
-
-(test
- (name test2)
- (modules test2)
- (deps test1b.ml test2b.ml test3b.ml test4b.ml)
+(executables
+ (names pp test1 test2 test3 test4)
  (preprocess (pps ppx_rml))
-  (action (progn
-    (run ./build.sh test1b.ml test1.exe)
-    (run ./build.sh test2b.ml test2.exe)
-    (run ./build.sh test3b.ml test3.exe)
-    (run ./build.sh test4b.ml test4.exe)
-)))
+ (promote (until-clean))
+ (flags (:standard -rectypes))
+ (libraries ppx_rml ppxlib graphics rmllib))
+
+
+;(rule (targets test1b.ml) (deps (file test1.ml)) (action (run ./pp.exe --impl %{deps} -o %{targets})))
+;(rule (targets test2b.ml) (deps (file test2.ml)) (action (run ./pp.exe --impl %{deps} -o %{targets})))
+;(rule (targets test3b.ml) (deps (file test3.ml)) (action (run ./pp.exe --impl %{deps} -o %{targets})))
+;(rule (targets test4b.ml) (deps (file test4.ml)) (action (run ./pp.exe --impl %{deps} -o %{targets})))
+
+; (test
+;  (name test2)
+;  (modules test2)
+; ; (deps test1b.ml test2b.ml test3b.ml test4b.ml)
+;  (libraries rmllib)
+;  (preprocess (pps ppx_rml))
+;   (action (progn
+;     (run ./test1.exe)
+;     (run ./build.sh test2.ml test2.exe)
+;     (run ./build.sh test3.ml test3.exe)
+;     (run ./build.sh test4.ml test4.exe)
+; )))

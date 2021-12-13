@@ -33,14 +33,28 @@ open Rml_misc
 
 let () = Options.set_options false
 let ext = 
-  Extension.declare
+  Extension.declare_with_path_arg
     "rml"
     Extension.Context.structure_item
     Ast_pattern.(pstr __)
-    (fun ~loc ~path str ->
+    (fun ~loc ~path ~arg str ->
       try
         print_endline "Started compiling";
-        {
+        { pstr_desc =
+          Pstr_module
+          {pmb_name = {txt = Some (match arg with | None -> "Rml" | Some {txt = Lident str; _} -> str | _ -> assert false ); loc = Location.none};
+            pmb_expr =
+            {pmod_desc = Pmod_structure (Compiler.translate_implementation ~loc ~path str);
+              pmod_loc = Location.none;
+              pmod_attributes = [];
+            };
+            pmb_loc = Location.none;
+            pmb_attributes = [];};
+          pstr_loc = Location.none;
+        }
+
+
+        (*{
           pstr_desc =
             Pstr_eval ({
               pexp_desc =
@@ -66,7 +80,7 @@ let ext =
               pexp_loc_stack = [];
             }, []);
           pstr_loc = Location.none;
-        }
+        }*)
       with x ->
         Rml_errors.report_error !err_fmt x;
         Format.pp_print_flush !std_fmt ();

@@ -1,0 +1,21 @@
+opam-version: "2.0"
+maintainer: "samuel vivien <samuel.vivien@ens.psl.eu>"
+authors: [ "Louis Mandel <fhuf@fzrfzr.org>" ]
+license: "MIT"
+dev-repo: "git+https://github.com/samsa1/ppx_rml.git"
+tags: [ "syntax" ]
+build: [
+  ["dune" "build" "-p" name "-j" jobs]
+  ["dune" "runtest" "-p" name "-j" jobs] {with-test}
+]
+depends: [
+  "ocaml" {>= "4.13.0"}
+  "dune" {>= "1.6.3"}
+  "menhir"
+  "ocamllex"
+  "ppxlib" {>= "0.20.0"}
+]
+synopsis: "Reactive ML"
+description: """
+ReactiveML ppx version
+"""
