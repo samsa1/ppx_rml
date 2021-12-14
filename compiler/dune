@@ -89,14 +89,12 @@
  (wrapped false)
  (kind ppx_rewriter)
  (libraries ppxlib inside_rml)
- (modules ppx_rml)
- (preprocess (pps ppxlib.metaquot)))
+ (modules ppx_rml))
 
 (executables
  (names rmlc)
  (modules rmlc)
- (libraries ppxlib inside_rml)
-)
+ (libraries ppxlib inside_rml))
 
 (install
   (files ppx_rml.a)
