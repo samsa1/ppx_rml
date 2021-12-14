@@ -6,6 +6,7 @@
   let%signal s = {default = 0; gather = fun x y -> x + y}
   let%signal s2 = {default = 1; gather = fun x y -> x * y}
   let%signal s3 = {default = (0, 0); gather = fun x _ -> x}
+  let%signal s4 = {default = []; gather = fun x y -> x :: y}
 
   let process spam n = 
     for%par i = 1 to n do
@@ -16,7 +17,7 @@
     done
 
   let process catch p =
-    let%await _ = (i1 = s && i2 = s2) || (i1, i2) = s3 in
+    let%await _ = (i1 = s && i2 = s2) || (i1, i2) = s3 || [i1; i2] = s4 in
     let%await _ = i3 = s in
     p := (i1 * ratio * ratio + i2 * ratio + i3)
 
