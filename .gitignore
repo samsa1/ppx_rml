@@ -57,3 +57,6 @@ backup-*-pre-rml.tgz
 
 # Local directory
 local/*
+
+# Editor files
+.vscode

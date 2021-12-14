@@ -330,6 +330,21 @@ and translate_expr expr =
             | _ -> assert false
           end
         | "until", _ | "signal", _ | "await", _ | "para", _ | "par", _ -> Location.raise_errorf ~loc "Invalid extension payload" 
+        | "present", PStr [stri] -> begin
+          match stri.pstr_desc with
+            | Pstr_eval (expr, []) ->
+              begin match expr.pexp_desc with
+                (* For the moment, we only support full if-then-else structures *)
+                | Pexp_ifthenelse (_if, _then, Some _else) -> 
+                  let event = 
+                    { pconf_desc= Pconf_present (translate_expr _if, None);
+                    pconf_loc= expr.pexp_loc; } 
+                  in 
+                  Pexpr_present (event, translate_expr _then, translate_expr _else)
+                | _ -> assert false
+              end
+            | _ -> assert false
+          end
         | _, _ -> Location.raise_errorf ~loc:name.loc "extension %s is not supported" name.txt
       end
   in {pexpr_desc; pexpr_loc = expr.pexp_loc}
