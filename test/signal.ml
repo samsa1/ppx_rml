@@ -21,6 +21,7 @@
     done
 
   let process catch p =
+    (* Here, both s3 and s4 won't ver be present (never emitted) but it shows the macro works :tm: *)
     let%await _ = (i1 = s && i2 = s2) || (i1, i2) = s3 || [i1; i2] = s4 in
     let%await _ = i3 = s in
     p := (i1 * ratio * ratio + i2 * ratio + i3)
@@ -35,6 +36,7 @@
     let d = if%present sp1 then 69 else 42 in
     emit sp2 0;
     let e = if%present sp2 && sp3 then 42 else 69 in
+    (* We need to re-emit it because the last line lasted an entire step as it went through the `else` *)
     emit sp2 0;
     let f = if%present sp2 || sp3 then 69 else 42 in
     [c; d; e; f]
