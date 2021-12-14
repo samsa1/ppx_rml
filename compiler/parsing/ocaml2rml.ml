@@ -250,6 +250,12 @@ and translate_expr expr =
             | [(Nolabel, proc)] -> Pexpr_run (translate_expr proc)
             | _ -> Location.raise_errorf  ~loc "run requires single unlabelled argument"
           end
+        | Pexp_ident {txt = Lident "default"; _} ->
+          begin match arglabel_expr_list with
+            | [] -> assert false (* should never happen *)
+            | [(Nolabel, proc)] -> Pexpr_default (translate_expr proc)
+            | _ -> Location.raise_errorf  ~loc "default requires single unlabelled argument"
+          end
         | Pexp_ident {txt = Lident "||"; _} ->
           begin match arglabel_expr_list with
             | [(Nolabel, e1); (Nolabel, e2)] -> Pexpr_par (translate_expr e1, translate_expr e2)
