@@ -35,8 +35,9 @@
     let d = if%present sp1 then 69 else 42 in
     emit sp2 0;
     let e = if%present sp2 && sp3 then 42 else 69 in
+    emit sp2 0;
     let f = if%present sp2 || sp3 then 69 else 42 in
-    (c, d, e, f)
+    [c; d; e; f]
 
 ]
 
@@ -50,10 +51,12 @@ open Rmllib.Implem_lco_ctrl_tree_record
 let compute_n n = 
   Rml_machine.rml_exec [] (fun () -> Lco_ctrl_tree_record.rml_run (fun () -> (Signals.compare n)))
 
+let compute_present () = 
+  Rml_machine.rml_exec [] (fun () -> Lco_ctrl_tree_record.rml_run (fun () -> (Signals.present_1 ())))
 
 let test_await () =
-  Alcotest.(check int) "await 1" (compute_n_seq 10) (compute_n 10)
-  Alcotest.(check int) "present 1" present_1 (69, 69, 69, 69)
+  Alcotest.(check int) "await 1" (compute_n_seq 10) (compute_n 10);
+  Alcotest.(check (list int)) "present 1" (compute_present ()) [69; 69; 69; 69]
 
 let test_set = [
   ("await", `Quick, test_await)
