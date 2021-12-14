@@ -7,6 +7,10 @@
   let%signal s2 = {default = 1; gather = fun x y -> x * y}
   let%signal s3 = {default = (0, 0); gather = fun x _ -> x}
   let%signal s4 = {default = []; gather = fun x y -> x :: y}
+  let%signal sp0 = {default = 0; gather = fun x _ -> x}
+  let%signal sp1 = {default = 0; gather = fun x _ -> x}
+  let%signal sp2 = {default = 0; gather = fun x _ -> x}
+  let%signal sp3 = {default = 0; gather = fun x _ -> x}
 
   let process spam n = 
     for%par i = 1 to n do
@@ -24,6 +28,16 @@
 
   let process compare n =
     let p = ref 0 in run (spam n) || run (catch p); !p
+  
+  let process present_1 () =
+    let c = (if%present sp0 then 42 else 69) in
+    emit sp1 0;
+    let d = if%present sp1 then 69 else 42 in
+    emit sp2 0;
+    let e = if%present sp2 && sp3 then 42 else 69 in
+    let f = if%present sp2 || sp3 then 69 else 42 in
+    (c, d, e, f)
+
 ]
 
 let compute_n_seq n =
@@ -39,6 +53,7 @@ let compute_n n =
 
 let test_await () =
   Alcotest.(check int) "await 1" (compute_n_seq 10) (compute_n 10)
+  Alcotest.(check int) "present 1" present_1 (69, 69, 69, 69)
 
 let test_set = [
   ("await", `Quick, test_await)

@@ -341,8 +341,12 @@ and translate_expr expr =
             | Pstr_eval (expr, []) ->
               begin match expr.pexp_desc with
                 (* For the moment, we only support full if-then-else structures *)
-                | Pexp_ifthenelse (if_expr, _then, Some _else) -> 
-                  Pexpr_present (event_of_expr if_expr, translate_expr _then, translate_expr _else)
+                | Pexp_ifthenelse (if_expr, _then, _else) ->
+                  let else_expr = match _else with
+                  | Some e -> translate_expr e
+                  | None -> {pexpr_desc= Pexpr_nothing; pexpr_loc= expr.pexp_loc}
+                in 
+                  Pexpr_present (event_of_expr if_expr, translate_expr _then, else_expr)
                 | _ -> assert false
               end
             | _ -> assert false
