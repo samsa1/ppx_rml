@@ -186,24 +186,33 @@ let rec pat_expr_of_value_binding vb =
   else
   (translate_patt vb.pvb_pat,
   translate_expr vb.pvb_expr)
+and pattern_of_expr expr = 
+  let loc = expr.pexp_loc in
+  let ppatt_desc = match expr.pexp_desc with
+    | Pexp_ident {txt = Lident str; loc} -> Ppatt_var ({psimple_loc = loc; psimple_id = str})
+    | Pexp_ident _ -> assert false
+    | Pexp_construct (lident, None) -> Ppatt_construct (ident_of_lident lident, None)
+    | Pexp_construct (lident, Some expr) -> Ppatt_construct (ident_of_lident lident, Some (pattern_of_expr expr))
+  | _ -> assert false
+  in {ppatt_desc; ppatt_loc = loc}
 and translate_expropt = function
   | None -> None
   | Some expr -> Some (translate_expr expr)
 and pat_expop_exp_of_case case =
   (translate_patt case.pc_lhs, translate_expropt case.pc_guard, translate_expr case.pc_rhs)
-and event_of_expr expr bindop =
+and event_of_expr expr =
     let pconf_desc = match expr.pexp_desc with
       | Pexp_apply ({pexp_desc = Pexp_ident {txt = Lident "||"; _}; _}, [(Nolabel, e1); (Nolabel, e2)])
-        -> Pconf_or (event_of_expr e1 bindop, event_of_expr e2 bindop)
+        -> Pconf_or (event_of_expr e1, event_of_expr e2)
       | Pexp_apply ({pexp_desc = Pexp_ident {txt = Lident "&&"; _}; _}, [(Nolabel, e1); (Nolabel, e2)])
-        -> Pconf_and (event_of_expr e1 bindop, event_of_expr e2 bindop)
-      | _ -> Pconf_present (translate_expr expr, bindop)
+        -> Pconf_and (event_of_expr e1, event_of_expr e2)
+      | Pexp_apply ({pexp_desc = Pexp_ident {txt = Lident "="; _}; _}, [(Nolabel, e1); (Nolabel, e2)])
+        -> Pconf_present (translate_expr e2, Some (pattern_of_expr e1))
+      | _ -> Pconf_present (translate_expr expr, None)
     in {pconf_desc; pconf_loc = expr.pexp_loc}
 and event_of_patt_ext_event patt = match patt.ppat_desc with
   | Ppat_extension ({txt = "event"; _}, PStr [{pstr_desc = Pstr_eval (expr, []); _}]) ->
-    event_of_expr expr None
-  | Ppat_extension ({txt = "event"; _}, PStr [{pstr_desc = Pstr_value (Nonrecursive, [vb]); _}]) ->
-    event_of_expr vb.pvb_expr (Some (translate_patt vb.pvb_pat))
+    event_of_expr expr
   | _ -> Location.raise_errorf ~loc:patt.ppat_loc "Invalid syntax, expected [%%event expr] or [%%event let i = expr]"
 and translate_expr expr =
   let loc = expr.pexp_loc in
@@ -292,17 +301,13 @@ and translate_expr expr =
             end
         | "await", PStr [stri] -> begin
           match stri.pstr_desc with
-            | Pstr_eval ({pexp_desc = Pexp_let (Nonrecursive, [vb], in_expr); _} as expr, []) ->
+            | Pstr_eval ({pexp_desc = Pexp_let (Nonrecursive, [vb], in_expr); _}, []) ->
                 begin match vb.pvb_pat.ppat_desc with
-                  | Ppat_construct ({txt = Lident "()"; _}, None) ->
+                  | Ppat_any ->
                       let imm, event = get_immediate vb.pvb_expr in
-                      Pexpr_seq (
-                        {pexpr_desc = Pexpr_await (imm, event_of_expr event None);
-                       pexpr_loc = expr.pexp_loc;},
-                       translate_expr in_expr)
+                      Pexpr_await_val (imm, All, event_of_expr event, None, translate_expr in_expr);
                   | _ ->
-                      let imm, await_kind, event, when_expr = get_imm_one_when vb.pvb_expr in
-                      Pexpr_await_val (imm, await_kind, event_of_expr event (Some (translate_patt vb.pvb_pat)), translate_expropt when_expr, translate_expr in_expr)
+                      assert false
                 end              
             | _ -> assert false
           end
@@ -335,12 +340,8 @@ and translate_expr expr =
             | Pstr_eval (expr, []) ->
               begin match expr.pexp_desc with
                 (* For the moment, we only support full if-then-else structures *)
-                | Pexp_ifthenelse (_if, _then, Some _else) -> 
-                  let event = 
-                    { pconf_desc= Pconf_present (translate_expr _if, None);
-                    pconf_loc= expr.pexp_loc; } 
-                  in 
-                  Pexpr_present (event, translate_expr _then, translate_expr _else)
+                | Pexp_ifthenelse (if_expr, _then, Some _else) -> 
+                  Pexpr_present (event_of_expr if_expr, translate_expr _then, translate_expr _else)
                 | _ -> assert false
               end
             | _ -> assert false
