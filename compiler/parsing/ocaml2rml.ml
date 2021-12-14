@@ -193,6 +193,7 @@ and pattern_of_expr expr =
     | Pexp_ident _ -> assert false
     | Pexp_construct (lident, None) -> Ppatt_construct (ident_of_lident lident, None)
     | Pexp_construct (lident, Some expr) -> Ppatt_construct (ident_of_lident lident, Some (pattern_of_expr expr))
+    | Pexp_tuple exprl -> Ppatt_tuple (List.map pattern_of_expr exprl)
   | _ -> assert false
   in {ppatt_desc; ppatt_loc = loc}
 and translate_expropt = function
