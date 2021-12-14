@@ -205,6 +205,56 @@ and event_of_patt_ext_event patt = match patt.ppat_desc with
   | Ppat_extension ({txt = "event"; _}, PStr [{pstr_desc = Pstr_value (Nonrecursive, [vb]); _}]) ->
     event_of_expr vb.pvb_expr (Some (translate_patt vb.pvb_pat))
   | _ -> Location.raise_errorf ~loc:patt.ppat_loc "Invalid syntax, expected [%%event expr] or [%%event let i = expr]"
+and pattern_of_expr expr =
+  let loc = expr.pexp_loc in
+  let pattern_desc = match expr.pexp_desc with
+  | Pexp_constant c -> Ppatt_constant (immediate_of_constant loc c)
+  | Pexp_ident {txt= Lident l; loc} -> Ppatt_var (simple_ident_of_string_loc {txt= l; loc})
+  | Pexp_tuple exprl -> 
+    Ppatt_tuple (List.map pattern_of_expr exprl)
+  | Pexp_variant _ | Pexp_coerce _ | Pexp_send _ | Pexp_new _ | Pexp_setinstvar _ | Pexp_assert _
+  | Pexp_override _ | Pexp_letmodule _ | Pexp_letexception _ | Pexp_lazy _ | Pexp_poly _ 
+  | Pexp_object _ | Pexp_newtype _ | Pexp_pack _ | Pexp_open _ | Pexp_letop _ | Pexp_unreachable ->
+      Location.raise_errorf ~loc "Unsupported OCaml expression"
+  | Pexp_extension (name, payload) -> Location.raise_errorf ~loc "Unsupported OCaml expression"
+  | _ -> Location.raise_errorf ~loc "Unsupported OCaml expression in pattern"
+  in {ppatt_desc= pattern_desc; ppatt_loc= loc;}
+and config_of_expression expr =
+  let loc = expr.pexp_loc in
+  let pconf_desc = match expr.pexp_desc with
+    | Pexp_ident _ ->
+      Pconf_present (translate_expr expr, None)
+    (* Here we handle both /\ and \/ *)
+    | Pexp_apply (expr, arglabel_expr_list) ->
+      begin
+        match expr.pexp_desc with
+        | Pexp_ident {txt = Lident "/|"; _} ->
+          begin match arglabel_expr_list with
+            | [(Nolabel, e1); (Nolabel, e2)] -> 
+              Pconf_and (config_of_expression e1, config_of_expression e2)
+            | _ -> Location.raise_errorf ~loc "/\\ is a syntax operator that takes exactly 2 arguments"
+          end
+        | Pexp_ident {txt = Lident "|/"; _} ->
+          begin match arglabel_expr_list with
+            | [(Nolabel, e1); (Nolabel, e2)] -> Pconf_or (config_of_expression e1, config_of_expression e2)
+            | _ -> Location.raise_errorf ~loc "\\/ is a syntax operator that takes exactly 2 arguments"
+          end
+        (*| Pexp_ident {txt = Lident f; _} -> *)
+        | Pexp_ident {txt = Lident func; loc= l} -> 
+          let _, b = List.split arglabel_expr_list in
+          let patt = {ppatt_desc = Ppatt_tuple (List.map pattern_of_expr b); ppatt_loc= l;} in
+          Pconf_present ({pexpr_desc= Pexpr_ident (ident_of_lident {txt = Lident func; loc= l}); pexpr_loc = l}, Some patt)
+        | _ -> Location.raise_errorf ~loc "Not for now." (* Function is a regular one *)
+        (* TODO implemented Pexpr_merge = expr |> expr *)
+      end
+    | Pexp_assert _
+    | Pexp_variant _ | Pexp_coerce _ | Pexp_send _ | Pexp_new _ | Pexp_setinstvar _ 
+    | Pexp_override _ | Pexp_letmodule _ | Pexp_letexception _ | Pexp_lazy _ | Pexp_poly _ 
+    | Pexp_object _ | Pexp_newtype _ | Pexp_pack _ | Pexp_open _ | Pexp_letop _ | Pexp_unreachable ->
+        Location.raise_errorf ~loc "Unsupported OCaml expression"
+    | Pexp_extension (name, payload) -> Location.raise_errorf ~loc "Unsupported OCaml expression"
+    | _ -> Location.raise_errorf ~loc "Unsupported OCaml expression in pattern"
+  in { pconf_desc= pconf_desc; pconf_loc= loc; }
 and translate_expr expr =
   let loc = expr.pexp_loc in
   let pexpr_desc = match expr.pexp_desc with
@@ -336,10 +386,7 @@ and translate_expr expr =
               begin match expr.pexp_desc with
                 (* For the moment, we only support full if-then-else structures *)
                 | Pexp_ifthenelse (_if, _then, Some _else) -> 
-                  let event = 
-                    { pconf_desc= Pconf_present (translate_expr _if, None);
-                    pconf_loc= expr.pexp_loc; } 
-                  in 
+                  let event = config_of_expression _if in
                   Pexpr_present (event, translate_expr _then, translate_expr _else)
                 | _ -> assert false
               end
