@@ -73,6 +73,16 @@ let rec translate_core_type ctype =
     Location.raise_errorf ~loc:ctype.ptyp_loc "Unsupported type in rml"
   in {pte_desc; pte_loc = ctype.ptyp_loc}
 
+let get_when_simple expr = match expr.pexp_desc with
+  | Pexp_apply ({pexp_desc = Pexp_ident {txt = Lident "when_cond"; _}; _}, arglabel_expr_list) ->
+    begin
+    match arglabel_expr_list with
+      | [] -> assert false (* Should not happen *)
+      | [(Nolabel, expr1); (Nolabel, expr2)] -> expr1, Some expr2
+      | (_, {pexp_loc; _})::_ -> Location.raise_errorf ~loc:pexp_loc "Labelled arguments are not allowed in rml"
+    end
+  | _ -> expr, None
+
 let get_immediate expr = match expr.pexp_desc with
   | Pexp_apply ({pexp_desc = Pexp_ident {txt = Lident "immediate"; _}; _}, arglabel_expr_list) ->
     (Immediate,
@@ -162,8 +172,31 @@ let rec translate_patt patt =
     | Ppat_unpack _ | Ppat_exception _ | Ppat_extension _ | Ppat_open _ ->
       Location.raise_errorf ~loc:patt.ppat_loc "Unsupported pattern in rml"
   in {ppatt_desc; ppatt_loc = patt.ppat_loc}
-
-let rec pat_expr_of_value_binding vb =
+let rec expression_of_pattern patt =
+  let pexpr_desc = match patt.ppat_desc with
+    | Ppat_any -> assert false
+    | Ppat_var str -> Pexpr_ident {pident_id= Pident str.txt; pident_loc = patt.ppat_loc}
+    | Ppat_alias (patt, name) -> assert false
+    | Ppat_constant c -> Pexpr_constant (immediate_of_constant ~loc:patt.ppat_loc c)
+    | Ppat_tuple pattl -> Pexpr_tuple (List.map expression_of_pattern pattl)
+    | Ppat_construct (lident, namel_patt_opt) ->
+      begin match (lident.txt, namel_patt_opt) with
+        | (Lident "()", None) -> Pexpr_constant Const_unit
+        | (Lident "true", None) -> Pexpr_constant (Const_bool true)
+        | (Lident "false", None) -> Pexpr_constant (Const_bool false)
+        | (_, None) -> Pexpr_construct (ident_of_lident lident, None)
+        | (_, Some p) -> Pexpr_construct (ident_of_lident lident, Some (expression_of_pattern p))
+      end
+    | Ppat_record (lident_patt_l, Closed) -> Pexpr_record (List.map (fun (lident, patt) -> (ident_of_lident lident, expression_of_pattern patt)) lident_patt_l)
+    | Ppat_record (_lident_patt_l, Open) -> Location.raise_errorf ~loc:patt.ppat_loc "Unsupported opened record in rml"
+    | Ppat_array pattl -> Pexpr_array (List.map expression_of_pattern pattl)
+    | Ppat_or (patt1, patt2) -> assert false
+    | Ppat_constraint (patt, ctype) -> Pexpr_constraint (expression_of_pattern patt, translate_core_type ctype)
+    | Ppat_interval _ | Ppat_variant _ | Ppat_type _ | Ppat_lazy _
+    | Ppat_unpack _ | Ppat_exception _ | Ppat_extension _ | Ppat_open _ ->
+      Location.raise_errorf ~loc:patt.ppat_loc "Unsupported pattern in rml"
+  in {pexpr_desc; pexpr_loc = patt.ppat_loc}
+and pat_expr_of_value_binding vb =
   let rec add_process expr =
     let pexpr_desc = match expr.pexp_desc with
       | Pexp_fun (arg_l, exprop, patt, expr) ->
@@ -186,24 +219,34 @@ let rec pat_expr_of_value_binding vb =
   else
   (translate_patt vb.pvb_pat,
   translate_expr vb.pvb_expr)
+and pattern_of_expr expr = 
+  let loc = expr.pexp_loc in
+  let ppatt_desc = match expr.pexp_desc with
+    | Pexp_ident {txt = Lident str; loc} -> Ppatt_var ({psimple_loc = loc; psimple_id = str})
+    | Pexp_ident _ -> assert false
+    | Pexp_construct (lident, None) -> Ppatt_construct (ident_of_lident lident, None)
+    | Pexp_construct (lident, Some expr) -> Ppatt_construct (ident_of_lident lident, Some (pattern_of_expr expr))
+    | Pexp_tuple exprl -> Ppatt_tuple (List.map pattern_of_expr exprl)
+  | _ -> assert false
+  in {ppatt_desc; ppatt_loc = loc}
 and translate_expropt = function
   | None -> None
   | Some expr -> Some (translate_expr expr)
 and pat_expop_exp_of_case case =
   (translate_patt case.pc_lhs, translate_expropt case.pc_guard, translate_expr case.pc_rhs)
-and event_of_expr expr bindop =
+and event_of_expr expr =
     let pconf_desc = match expr.pexp_desc with
       | Pexp_apply ({pexp_desc = Pexp_ident {txt = Lident "||"; _}; _}, [(Nolabel, e1); (Nolabel, e2)])
-        -> Pconf_or (event_of_expr e1 bindop, event_of_expr e2 bindop)
+        -> Pconf_or (event_of_expr e1, event_of_expr e2)
       | Pexp_apply ({pexp_desc = Pexp_ident {txt = Lident "&&"; _}; _}, [(Nolabel, e1); (Nolabel, e2)])
-        -> Pconf_and (event_of_expr e1 bindop, event_of_expr e2 bindop)
-      | _ -> Pconf_present (translate_expr expr, bindop)
+        -> Pconf_and (event_of_expr e1, event_of_expr e2)
+      | Pexp_apply ({pexp_desc = Pexp_ident {txt = Lident "="; _}; _}, [(Nolabel, e1); (Nolabel, e2)])
+        -> Pconf_present (translate_expr e2, Some (pattern_of_expr e1))
+      | _ -> Pconf_present (translate_expr expr, None)
     in {pconf_desc; pconf_loc = expr.pexp_loc}
 and event_of_patt_ext_event patt = match patt.ppat_desc with
   | Ppat_extension ({txt = "event"; _}, PStr [{pstr_desc = Pstr_eval (expr, []); _}]) ->
-    event_of_expr expr None
-  | Ppat_extension ({txt = "event"; _}, PStr [{pstr_desc = Pstr_value (Nonrecursive, [vb]); _}]) ->
-    event_of_expr vb.pvb_expr (Some (translate_patt vb.pvb_pat))
+    event_of_expr expr
   | _ -> Location.raise_errorf ~loc:patt.ppat_loc "Invalid syntax, expected [%%event expr] or [%%event let i = expr]"
 and translate_expr expr =
   let loc = expr.pexp_loc in
@@ -239,6 +282,30 @@ and translate_expr expr =
             | [] -> assert false (* should never happen *)
             | [(Nolabel, proc)] -> Pexpr_run (translate_expr proc)
             | _ -> Location.raise_errorf  ~loc "run requires single unlabelled argument"
+          end
+        | Pexp_ident {txt = Lident "default"; _} ->
+          begin match arglabel_expr_list with
+            | [] -> assert false (* should never happen *)
+            | [(Nolabel, proc)] -> Pexpr_default (translate_expr proc)
+            | _ -> Location.raise_errorf  ~loc "default requires single unlabelled argument"
+          end
+        | Pexp_ident {txt = Lident "last"; _} ->
+          begin match arglabel_expr_list with
+            | [] -> assert false (* should never happen *)
+            | [(Nolabel, proc)] -> Pexpr_last (translate_expr proc)
+            | _ -> Location.raise_errorf  ~loc "last requires single unlabelled argument"
+          end
+        | Pexp_ident {txt = Lident "pre_value"; _} ->
+          begin match arglabel_expr_list with
+            | [] -> assert false (* should never happen *)
+            | [(Nolabel, proc)] -> Pexpr_pre (Value, translate_expr proc)
+            | _ -> Location.raise_errorf  ~loc "pre_value requires single unlabelled argument"
+          end
+        | Pexp_ident {txt = Lident "pre_status"; _} ->
+          begin match arglabel_expr_list with
+            | [] -> assert false (* should never happen *)
+            | [(Nolabel, proc)] -> Pexpr_pre (Status, translate_expr proc)
+            | _ -> Location.raise_errorf  ~loc "pre_status requires single unlabelled argument"
           end
         | Pexp_ident {txt = Lident "||"; _} ->
           begin match arglabel_expr_list with
@@ -292,17 +359,24 @@ and translate_expr expr =
             end
         | "await", PStr [stri] -> begin
           match stri.pstr_desc with
-            | Pstr_eval ({pexp_desc = Pexp_let (Nonrecursive, [vb], in_expr); _} as expr, []) ->
+            | Pstr_eval ({pexp_desc = Pexp_let (Nonrecursive, [vb], in_expr); _}, []) ->
                 begin match vb.pvb_pat.ppat_desc with
-                  | Ppat_construct ({txt = Lident "()"; _}, None) ->
-                      let imm, event = get_immediate vb.pvb_expr in
-                      Pexpr_seq (
-                        {pexpr_desc = Pexpr_await (imm, event_of_expr event None);
-                       pexpr_loc = expr.pexp_loc;},
-                       translate_expr in_expr)
-                  | _ ->
-                      let imm, await_kind, event, when_expr = get_imm_one_when vb.pvb_expr in
-                      Pexpr_await_val (imm, await_kind, event_of_expr event (Some (translate_patt vb.pvb_pat)), translate_expropt when_expr, translate_expr in_expr)
+                  | Ppat_any ->
+                      let event, when_expr = get_when_simple vb.pvb_expr in
+                      Pexpr_await_val (Nonimmediate, All, event_of_expr event, translate_expropt when_expr, translate_expr in_expr);
+                  | _ -> assert false
+                end              
+            | _ -> assert false
+          end
+        | "await_immediate", PStr [stri] -> begin
+          match stri.pstr_desc with
+            | Pstr_eval ({pexp_desc = Pexp_let (Nonrecursive, [vb], in_expr); _}, []) ->
+                begin match vb.pvb_pat.ppat_desc with
+                  | Ppat_any ->
+                      assert false; (* These don't work for now *)
+                      let event, when_expr = get_when_simple vb.pvb_expr in
+                      Pexpr_await_val (Immediate, One, event_of_expr event, translate_expropt when_expr, translate_expr in_expr);
+                  | _ -> assert false
                 end              
             | _ -> assert false
           end
@@ -335,12 +409,12 @@ and translate_expr expr =
             | Pstr_eval (expr, []) ->
               begin match expr.pexp_desc with
                 (* For the moment, we only support full if-then-else structures *)
-                | Pexp_ifthenelse (_if, _then, Some _else) -> 
-                  let event = 
-                    { pconf_desc= Pconf_present (translate_expr _if, None);
-                    pconf_loc= expr.pexp_loc; } 
-                  in 
-                  Pexpr_present (event, translate_expr _then, translate_expr _else)
+                | Pexp_ifthenelse (if_expr, _then, _else) ->
+                  let else_expr = match _else with
+                  | Some e -> translate_expr e
+                  | None -> {pexpr_desc= Pexpr_nothing; pexpr_loc= expr.pexp_loc}
+                in 
+                  Pexpr_present (event_of_expr if_expr, translate_expr _then, else_expr)
                 | _ -> assert false
               end
             | _ -> assert false

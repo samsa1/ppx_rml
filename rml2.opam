@@ -7,8 +7,6 @@ dev-repo: "git+https://github.com/samsa1/ppx_rml.git"
 tags: [ "syntax" ]
 build: [
   ["dune" "build" "-j" jobs]
-  ["dune" "exec" "configure-tools/embedrzi.exe" "." ">" "compiler/global/rzi.ml"]
-  ["dune" "build" "-j" jobs "--force"]
   ["dune" "runtest" "-j" jobs] {with-test}
 ]
 depends: [
