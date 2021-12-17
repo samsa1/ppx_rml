@@ -17,6 +17,8 @@
 (*                                                                    *)
 (**********************************************************************)
 
+open Rmllib
+
 let sampling : float option ref = ref None
 
 let debug = ref false
@@ -61,8 +63,8 @@ let print_help () =
 let init () =
   Toploop.initialize_toplevel_env ();
   Toploop.input_name := "";
-  Rmlcompiler.Misc.interactive := true;
-  Rmlcompiler.Misc.print_type := true
+  Inside_rml.Rml_misc.interactive := true;
+  Inside_rml.Rml_misc.print_type := true
 
 let at_bol = ref true
 let consume_nl = ref false
@@ -183,7 +185,7 @@ let eval fmt rml_phrase =
   let rec aux fmt directive =
       match directive with
       | Rmltop_alt_lexer.Rml_phrase s ->
-          let error, ocaml_phrases = Rmlcompiler.Interactive.translate_phrase s in
+          let error, ocaml_phrases = Inside_rml.Interactive.translate_phrase s in
           begin match error with
             | Some error -> Format.fprintf fmt "@[%s@]@." error
             | None ->
@@ -200,7 +202,7 @@ let eval fmt rml_phrase =
           let s = Printf.sprintf
             "let () = Rmltop_alt_global.add_to_run (process (run( %s );()));;"
             s in
-          let error, ocaml_phrases = Rmlcompiler.Interactive.translate_phrase s in
+          let error, ocaml_phrases = Inside_rml.Interactive.translate_phrase s in
           begin match error with
             | Some error -> Format.fprintf fmt "@[%s@]@." error
             | None -> eval_ocaml_phrases fmt false ocaml_phrases
@@ -211,7 +213,7 @@ let eval fmt rml_phrase =
           let s = Printf.sprintf
             "let () = Rmltop_alt_global.add_to_run (process (%s; ()));;"
             s in
-          let error, ocaml_phrases = Rmlcompiler.Interactive.translate_phrase s in
+          let error, ocaml_phrases = Inside_rml.Interactive.translate_phrase s in
           begin match error with
             | Some error -> Format.fprintf fmt "@[%s@]@." error
             | None -> eval_ocaml_phrases fmt true ocaml_phrases

@@ -39,7 +39,6 @@ let ext =
     Ast_pattern.(pstr __)
     (fun ~loc ~path ~arg str ->
       try
-        print_endline "Started compiling";
         { pstr_desc =
           Pstr_module
           {pmb_name = {txt = Some (match arg with | None -> "Rml" | Some {txt = Lident str; _} -> str | _ -> assert false ); loc = Location.none};
@@ -52,35 +51,6 @@ let ext =
             pmb_attributes = [];};
           pstr_loc = Location.none;
         }
-
-
-        (*{
-          pstr_desc =
-            Pstr_eval ({
-              pexp_desc =
-                Pexp_constraint({
-                  pexp_desc =
-                    Pexp_pack {
-                      pmod_desc = Pmod_structure (Compiler.translate_implementation ~loc ~path str);
-                      pmod_loc = Location.none;
-                      pmod_attributes = [];
-                    };
-                  pexp_loc = Location.none;
-                  pexp_attributes = [];
-                  pexp_loc_stack = [];
-                },
-                {
-                  ptyp_desc = Ptyp_package ({loc = Location.none; txt = Lident "S"}, []);
-                  ptyp_loc = Location.none;
-                  ptyp_attributes = [];
-                  ptyp_loc_stack = [];
-                });
-              pexp_loc = Location.none;
-              pexp_attributes = [];
-              pexp_loc_stack = [];
-            }, []);
-          pstr_loc = Location.none;
-        }*)
       with x ->
         Rml_errors.report_error !err_fmt x;
         Format.pp_print_flush !std_fmt ();

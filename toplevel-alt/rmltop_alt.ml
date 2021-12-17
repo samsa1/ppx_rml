@@ -45,14 +45,14 @@ let init_rml = [
 
 let print_intro () =
   print_string "        ReactiveML version ";
-  print_string Rmlcompiler.Version.version;
+  print_string Inside_rml.Version.version;
   print_newline();
   print_newline();
   if !show_help then print_help ()
 
 let load_dir dir =
   Topdirs.dir_directory dir;
-  Rmlcompiler.Configure.add_include dir;
+  Inside_rml.Configure.add_include dir;
   print_DEBUG "Added %s directory to search path.\n" dir
 
 let load_file file =
@@ -102,7 +102,7 @@ let start () =
 
 let main () =
   if not !hide_rml_dirs then begin
-    let rml_stdlib = Rmlcompiler.Configure.locate_stdlib () in
+    let rml_stdlib = Inside_rml.Configure.locate_stdlib () in
     include_dir :=
          rml_stdlib // "lco"
       :: rml_stdlib // "toplevel"
@@ -110,11 +110,11 @@ let main () =
   end;
   print_intro();
   Sys.catch_break true;
-  Rmlcompiler.Configure.set_runtime "Lco_toplevel_alt";
+  Inside_rml.Configure.set_runtime "Lco_toplevel_alt";
   Rmltop_alt_core.init ();
   init_toplevel ();
-  Rmlcompiler.Interactive.init ();
-  Rmlcompiler.Misc.opt_iter Rmltop_alt_global.set_sampling !sampling;
+  Inside_rml.Interactive.init ();
+  Inside_rml.Rml_misc.opt_iter Rmltop_alt_global.set_sampling !sampling;
   eval_ocaml_phrases Format.std_formatter !debug init_rml;
   start ();
   try

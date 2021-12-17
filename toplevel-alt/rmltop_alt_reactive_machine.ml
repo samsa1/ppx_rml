@@ -21,6 +21,8 @@
 (* created: 2007-12-03  *)
 (* author: Louis Mandel *)
 
+open Rmllib
+
 module Interpretor = Implem_lco_ctrl_tree_record.Lco_ctrl_tree_record
 
 let rml_react_unsafe =

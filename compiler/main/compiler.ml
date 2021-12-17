@@ -268,9 +268,6 @@ let translate_implementation ~loc ~path ocaml_ast =
     let decl_list = Ocaml2rml.main ~loc ~path ocaml_ast in
     Parse_timer.time();
 
-    print_endline "File parsed";
-    (*List.iteri (fun i ii -> if i = 5 then Parse_printer.impl_item 0 (Format.formatter_of_out_channel Stdlib.stdout) ii) decl_list; *)
-
     (* expend externals *)
     External_timer.start();
     let decl_list = List.map External.expend decl_list in
@@ -431,6 +428,7 @@ let compile_implementation _module_name filename =
 	   "(* "^(Array.fold_right (fun s cmd -> s^" "^cmd) Sys.argv " ")^
 	   "*)\n\n");
         (* selection of the interpreter *)
+	output_string out_chan ("open Rmllib;;\n");
 	output_string out_chan ("open "^ !interpreter_impl ^";;\n");
 
         (* the implementation *)

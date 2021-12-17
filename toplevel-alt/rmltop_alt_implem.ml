@@ -21,6 +21,8 @@
 (* author: Louis Mandel *)
 (* created: 2005-10-25  *)
 
+open Rmllib
+
 module Sig_env (* : S *) =
   struct
 

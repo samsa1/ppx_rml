@@ -1,0 +1,18 @@
+(rule (target rmltop_alt_global.rzi) (action (run ../compiler/rmlc.exe -c rmltop_alt_global.rmli)))
+(rule (target rmltop_alt_reactive_machine.rzi) (action (run ../compiler/rmlc.exe -c rmltop_alt_reactive_machine.rmli)))
+(rule (target rmltop_alt_controller.ml) (deps rmltop_alt_reactive_machine.rzi rmltop_alt_global.rzi) (action (run ../compiler/rmlc.exe -runtime Rmltop_alt rmltop_alt_controller.rml )))
+
+(rule (target rmltop_alt_machine_body.ml) (action (run ../compiler/rmlc.exe -runtime Lco_ctrl_tree rmltop_alt_machine_body.rml)))
+
+
+(ocamllex rmltop_alt_lexer)
+
+(executables
+ (names rmltop_alt)
+ (modules_without_implementation errors)
+ (libraries rmllib ocamlbuild compiler-libs inside_rml)
+ (flags (:standard -rectypes)))
+
+(install
+ (files rmltop_alt.exe)
+ (section bin))
