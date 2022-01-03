@@ -31,7 +31,7 @@
  (modules rmltop))
 
 (install
- (files rmltop.exe)
+ (files (rmltop.exe as rmltop))
  (section bin))
 
 (install

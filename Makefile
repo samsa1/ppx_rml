@@ -1,8 +1,6 @@
 build:
-	(cd configure-tools && dune build embedrzi.exe)
-	./_build/default/configure-tools/embedrzi.exe . > compiler/global/rzi.ml
-	echo "rzi.ml written"
-	dune build --profile release
+	dune build stdlib
+	RML_RECOMPILE_RZI=0 dune build 
 
 test: build
 	dune runtest

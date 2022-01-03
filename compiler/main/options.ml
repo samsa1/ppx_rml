@@ -24,12 +24,13 @@
 open Rml_misc
 open Configure
 
+let runtime = ref "Lco"
+let v = ref false
+let version = ref false
+let where = ref false
+let stdlib = ref None
+
 let set_options b =
-  let runtime = ref "Lco" in
-  let v = ref false in
-  let version = ref false in
-  let where = ref false in
-  let stdlib = ref None in
   let _ = try
     if b 
     then begin

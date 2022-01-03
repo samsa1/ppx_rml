@@ -14,7 +14,7 @@
 (rule (target rml_asttypes.ml) (action (copy global/rml_asttypes.ml rml_asttypes.ml)))
 (rule (target global.ml) (action (copy global/global.ml global.ml)))
 (rule (target def_modules.ml) (action (copy global/def_modules.ml def_modules.ml)))
-(rule (target rzi.ml) (deps ../configure-tools/embedrzi.exe) (action (with-stdout-to rzi.ml (run ../configure-tools/embedrzi.exe ..))))
+(rule (target rzi.ml) (deps ../configure-tools/embedrzi.exe (env_var RML_RECOMPILE_RZI)) (action (with-stdout-to rzi.ml (run ../configure-tools/embedrzi.exe ..))))
 (rule (target rml_warnings.ml) (action (copy global/rml_warnings.ml rml_warnings.ml)))
 (rule (target symbol_table.ml) (action (copy global/symbol_table.ml symbol_table.ml)))
 (rule (target initialization.ml) (action (copy global/initialization.ml initialization.ml)))
@@ -101,5 +101,5 @@
   (section lib))
 
 (install
-  (files rmlc.exe)
+  (files (rmlc.exe as rmlc))
   (section bin))

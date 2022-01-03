@@ -6,15 +6,21 @@ license: "MIT"
 dev-repo: "git+https://github.com/samsa1/ppx_rml.git"
 tags: [ "syntax" ]
 build: [
-  ["dune" "build" "-j" jobs]
+  ["./configure" "--prefix" "%{prefix}%"]
+  [make "-j" jobs]
   ["dune" "runtest" "-j" jobs] {with-test}
 ]
+
+install: [
+  ["dune" "install" "-j" jobs]
+]
+
 depends: [
   "ocaml" {>= "4.13.0"}
   "dune" {>= "1.6.3"}
   "menhir"
   "ppxlib" {>= "0.20.0"}
-
+  "alcotest"
 ]
 synopsis: "Reactive ML"
 description: """

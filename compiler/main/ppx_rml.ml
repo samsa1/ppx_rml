@@ -32,6 +32,45 @@ open Ppxlib
 open Rml_misc
 
 let () = Options.set_options false
+
+let compute_args ~loc str =
+  let rec compute_args_inner = function
+    | {pstr_desc = Pstr_attribute attribute; pstr_loc = loc}::tl ->
+        let () = match attribute.attr_name.txt with
+          | "stdlib" -> Location.raise_errorf ~loc "Option not implemented"
+          | "v" -> Options.v := true
+          | "version" -> Options.version := true
+          | "where" -> Options.where := true
+          | "c" -> no_link := true
+          | "I" -> Location.raise_errorf ~loc "Option not implemented"
+          | "s" -> Location.raise_errorf ~loc "Option not implemented"
+          | "n" -> Location.raise_errorf ~loc "Option not implemented"
+          | "sampling" -> Location.raise_errorf ~loc "Option not implemented"
+          | "i" -> Configure.set_verbose ()
+          | "annot" -> Location.raise_errorf ~loc "Option not implemented"
+          | "dtypes" -> Location.raise_errorf ~loc "Option not implemented"
+          | "no_reactivity_simpl" -> Location.raise_errorf ~loc "Option not implemented"
+          | "old_loop_warning" -> Location.raise_errorf ~loc "Option not implemented"
+          | "runtime" -> Location.raise_errorf ~loc "Option not implemented"
+          | "thread" -> Location.raise_errorf ~loc "Option not implemented"
+          | "debug" -> Location.raise_errorf ~loc "Option not implemented"
+          | "interactive" -> Location.raise_errorf ~loc "Option not implemented"
+          | "d" -> Location.raise_errorf ~loc "Option not implemented"
+          | "nostdlib" -> Location.raise_errorf ~loc "Option not implemented"
+          | "no_nary_opt" -> Location.raise_errorf ~loc "Option not implemented"
+          | "no_static_opt" -> Location.raise_errorf ~loc "Option not implemented"
+          | "no_for_opt" -> Location.raise_errorf ~loc "Option not implemented"
+          | "no_const_opt" -> Location.raise_errorf ~loc "Option not implemented"
+          | "dparse" -> Location.raise_errorf ~loc "Option not implemented"
+          | "dtime" -> Location.raise_errorf ~loc "Option not implemented"
+          | _ -> Location.raise_errorf ~loc "Unknown option"
+        in compute_args_inner tl
+    | x -> PStr x
+  in match str with
+    | PStr l -> compute_args_inner l
+    | _ -> Location.raise_errorf ~loc "Invalid syntax"
+
+
 let ext = 
   Extension.declare_with_path_arg
     "rml"
