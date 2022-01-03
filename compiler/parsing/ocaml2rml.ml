@@ -390,7 +390,9 @@ and translate_expr expr =
                   | Ppat_var str ->
                     Pexpr_await_val (Nonimmediate, All, event_of_expr (Some str) vb.pvb_expr, None, translate_expr in_expr);
                   | _ -> assert false
-                end              
+                end
+            | Pstr_eval (expr, []) ->
+                Pexpr_await (Nonimmediate, event_of_expr None expr)
             | _ -> assert false
           end
         | "await_immediate", PStr [stri] -> begin
@@ -403,6 +405,8 @@ and translate_expr expr =
                       Pexpr_await_val (Immediate, One, event_of_expr None event, translate_expropt when_expr, translate_expr in_expr);
                   | _ -> assert false
                 end
+            | Pstr_eval (expr, []) ->
+              Pexpr_await (Immediate, event_of_expr None expr)
             | _ -> assert false
           end
         | "signal", PStr [stri] ->
