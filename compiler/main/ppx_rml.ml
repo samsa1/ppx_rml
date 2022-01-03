@@ -47,22 +47,24 @@ let compute_args ~loc str =
           | "n" -> Location.raise_errorf ~loc "Option not implemented"
           | "sampling" -> Location.raise_errorf ~loc "Option not implemented"
           | "i" -> Configure.set_verbose ()
-          | "annot" -> Location.raise_errorf ~loc "Option not implemented"
-          | "dtypes" -> Location.raise_errorf ~loc "Option not implemented"
-          | "no_reactivity_simpl" -> Location.raise_errorf ~loc "Option not implemented"
-          | "old_loop_warning" -> Location.raise_errorf ~loc "Option not implemented"
+          | "annot" -> Configure.set_save_types ()
+          | "dtypes" -> Configure.set_save_types ()
+          | "no_reactivity_warning" -> Configure.unset_reactivity_warning ()
+          | "dreactivity" -> Configure.set_dreactivity ()
+          | "no_reactivity_simpl" -> Configure.unset_no_reactivity_simpl ()
+          | "old_loop_warning" -> Configure.set_old_instantaneous_loop_warning ()
           | "runtime" -> Location.raise_errorf ~loc "Option not implemented"
-          | "thread" -> Location.raise_errorf ~loc "Option not implemented"
-          | "debug" -> Location.raise_errorf ~loc "Option not implemented"
-          | "interactive" -> Location.raise_errorf ~loc "Option not implemented"
+          | "thread" -> Rml_misc.with_thread := true
+          | "debug" -> Rml_misc.with_debug := true
+          | "interactive" -> Configure.set_interactive ()
           | "d" -> Location.raise_errorf ~loc "Option not implemented"
-          | "nostdlib" -> Location.raise_errorf ~loc "Option not implemented"
-          | "no_nary_opt" -> Location.raise_errorf ~loc "Option not implemented"
-          | "no_static_opt" -> Location.raise_errorf ~loc "Option not implemented"
-          | "no_for_opt" -> Location.raise_errorf ~loc "Option not implemented"
+          | "nostdlib" -> Configure.set_no_stdlib ()
+          | "no_nary_opt" -> Configure.set_no_nary ()
+          | "no_static_opt" -> Configure.set_no_static ()
+          | "no_for_opt" -> Configure.set_no_for ()
           | "no_const_opt" -> Location.raise_errorf ~loc "Option not implemented"
-          | "dparse" -> Location.raise_errorf ~loc "Option not implemented"
-          | "dtime" -> Location.raise_errorf ~loc "Option not implemented"
+          | "dparse" -> Configure.set_dparse ()
+          | "dtime" -> Configure.set_dtime ()
           | _ -> Location.raise_errorf ~loc "Unknown option"
         in compute_args_inner tl
     | x -> PStr x
