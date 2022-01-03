@@ -30,6 +30,17 @@ let version = ref false
 let where = ref false
 let stdlib = ref None
 
+let eval_options () =
+  set_runtime !runtime;
+  begin match !stdlib with
+  | None -> ()
+  | Some s -> set_stdlib s
+  end;
+  if !v then show_v ();
+  if !version then show_version ();
+  if !where then show_where ();
+  if !with_thread then add_stdlib_thread ()
+
 let set_options b =
   let _ = try
     if b 
@@ -66,16 +77,8 @@ let set_options b =
       ]
       add_to_compile
       errmsg;
-    end;
-    set_runtime !runtime;
-    begin match !stdlib with
-    | None -> ()
-    | Some s -> set_stdlib s
-    end;
-    if !v then show_v ();
-    if !version then show_version ();
-    if !where then show_where ();
-    if !with_thread then add_stdlib_thread ();
+      eval_options ()
+    end
   with x ->
     Rml_errors.report_error Format.err_formatter x;
     exit 2
