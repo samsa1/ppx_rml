@@ -519,7 +519,6 @@ let impl_item_of_str_item stri =
                 | Pexp_record ([({txt = Lident "memory"; _}, expr_memory); ({txt = Lident "gather"; _}, expr_gather)], None)
                 | Pexp_record ([({txt = Lident "gather"; _}, expr_gather); ({txt = Lident "memory"; _}, expr_memory)], None) ->
                     Pimpl_signal (sident_typeoptL_of_patt vb.pvb_pat, Some (Memory, translate_expr expr_memory, translate_expr expr_gather))
-                | Pexp_record _ -> Pimpl_signal (sident_typeoptL_of_patt vb.pvb_pat, None)
                 | _ -> assert false
                 end
               | _ -> assert false
