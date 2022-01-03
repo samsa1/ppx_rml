@@ -304,6 +304,11 @@ let translate_implementation ~loc ~path ocaml_ast =
 	compile_implementation_back_end_str info_fmt out_chan
 	  module_name intermediate_code;
 
+  Buffer.add_string out_chan 
+  ("let run (p : 'a "^ !interpreter_module ^".process) : 'a = Rml_machine.rml_exec
+  ([])
+  (fun () -> "^ !interpreter_module ^".rml_run (function | ()  -> p ) )");
+
         (* main process *)
 	if !simulation_process <> "" then
 	  begin

@@ -30,7 +30,7 @@
   let process compare n =
     let p = ref 0 in run (spam n) || run (catch p); !p
   
-  let process present_1 () =
+  let process present_1 =
     let c = (if%present sp0 then 42 else 69) in
     emit sp1 0;
     let d = if%present sp1 then 69 else 42 in
@@ -48,13 +48,11 @@ let compute_n_seq n =
   let n2 = ((n + 1) * n) / 2 in
   Signals.ratio * Signals.ratio * n2 + Signals.ratio * (fac n) + (2 * n2)
 
-open Rmllib.Implem_lco_ctrl_tree_record
-
 let compute_n n = 
-  Rml_machine.rml_exec [] (fun () -> Lco_ctrl_tree_record.rml_run (fun () -> (Signals.compare n)))
+  Signals.run (Signals.compare n)
 
 let compute_present () = 
-  Rml_machine.rml_exec [] (fun () -> Lco_ctrl_tree_record.rml_run (fun () -> (Signals.present_1 ())))
+  Signals.run (Signals.present_1)
 
 let test_await () =
   Alcotest.(check int) "await 1" (compute_n_seq 10) (compute_n 10);

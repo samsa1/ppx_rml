@@ -32,10 +32,7 @@ let rec fac n = if n < 2 then 1 else n * fac (n - 1) in
 let n2 = ((n + 1) * n) / 2 in
 Signals.ratio * Signals.ratio * n2 + Signals.ratio * (fac n) + (2 * n2)
 
-open Rmllib.Implem_lco_ctrl_tree_record
-
-let compute_n n = 
-Rml_machine.rml_exec [] (fun () -> Lco_ctrl_tree_record.rml_run (fun () -> (Signals.compare n)))
+let compute_n n = Signals.run (Signals.compare n)
 
 let test_await () =
 Alcotest.(check int) "await_when 1" (compute_n_seq 10) (compute_n 10)

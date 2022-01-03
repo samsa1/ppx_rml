@@ -22,12 +22,10 @@ let rec build_random n =
     Node (n - l - r, build_random l, build_random r)
 ]
 
-open Rmllib.Implem_lco_ctrl_tree_record
-
 let compute_n n = 
   let tree = Rml.build_random n in
   let nb = ref 0 in
-  Rml_machine.rml_exec [] (fun () -> Lco_ctrl_tree_record.rml_run (fun () -> (Rml.iter_breadth (fun n -> nb := !nb + n) tree)));
+  Rml.run (Rml.iter_breadth (fun n -> nb := !nb + n) tree);
   !nb
 
 let test_rififi n () =
