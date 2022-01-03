@@ -1,6 +1,9 @@
 module type S = sig end
 
 [%%rml
+
+[@@@sampling 0.01]
+
 let () =  Random.self_init ()
 
 type coord = { x: float; y: float; }
@@ -81,7 +84,7 @@ let process window (wall : wall) (s : ('a, number_state list) event) : unit proc
   init_graphics wall;
   Graphics.auto_synchronize false;
   while true do
-    let%await l = s in
+    let%await _ = l = s in
     Graphics.clear_graph ();
     List.iter draw_number l;
     draw_wall wall;
@@ -137,11 +140,11 @@ let process number (init_state : number_state) (wall : wall) (s : (number_state,
       while true do
         state := move !state wall;
         emit s !state;
-        let%await l = s in
+        let%await _ = l = s in
           List.iter (collision !state) l;
         pause;
       done;
-    with [%event let Some hunter = init_state.kill] ->
+    with [%event Some hunter = init_state.kill] ->
       begin
           print_int init_state.id;
           print_string " killed by ";
@@ -174,7 +177,7 @@ let process number (init_state : number_state) (wall : wall) (s : (number_state,
 (* Question 8 *)
 
 let rec process add new_number wall n s =
-  let%await coord = new_number in
+  let%await _ = coord = new_number in
   run (
     let nn = random_number_state n wall in
     let nn2 = {

@@ -247,7 +247,7 @@ and event_of_expr expr =
 and event_of_patt_ext_event patt = match patt.ppat_desc with
   | Ppat_extension ({txt = "event"; _}, PStr [{pstr_desc = Pstr_eval (expr, []); _}]) ->
     event_of_expr expr
-  | _ -> Location.raise_errorf ~loc:patt.ppat_loc "Invalid syntax, expected [%%event expr] or [%%event let i = expr]"
+  | _ -> Location.raise_errorf ~loc:patt.ppat_loc "Invalid syntax, expected [%%event expr]"
 and translate_expr expr =
   let loc = expr.pexp_loc in
   let pexpr_desc = match expr.pexp_desc with

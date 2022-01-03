@@ -1,10 +1,17 @@
-(executables
- (names pp)
+(executable
+ (name pp)
  (promote (until-clean))
  (flags (:standard -rectypes))
  (libraries ppx_rml ppxlib rmllib)
  (modules pp))
 
+(executable
+ (name darwin)
+ (promote (until-clean))
+ (flags (:standard -rectypes))
+ (libraries rmllib graphics)
+ (preprocess (pps ppx_rml))
+ (modules darwin))
 
 (test
  (name test)
