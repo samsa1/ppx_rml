@@ -84,7 +84,7 @@ let process window (wall : wall) (s : ('a, number_state list) event) : unit proc
   init_graphics wall;
   Graphics.auto_synchronize false;
   while true do
-    let%await _ = l = s in
+    let%await l = s in
     Graphics.clear_graph ();
     List.iter draw_number l;
     draw_wall wall;
@@ -140,11 +140,11 @@ let process number (init_state : number_state) (wall : wall) (s : (number_state,
       while true do
         state := move !state wall;
         emit s !state;
-        let%await _ = l = s in
+        let%await l = s in
           List.iter (collision !state) l;
         pause;
       done;
-    with [%event Some hunter = init_state.kill] ->
+    with [%event Some hunter = init_state.kill] -> (* until init_state.kill(Some hunter) -> *)
       begin
           print_int init_state.id;
           print_string " killed by ";
@@ -177,7 +177,7 @@ let process number (init_state : number_state) (wall : wall) (s : (number_state,
 (* Question 8 *)
 
 let rec process add new_number wall n s =
-  let%await _ = coord = new_number in
+  let%await coord = new_number in (* (c1, c2) = s1 || (c2, c1) = s2) *)
   run (
     let nn = random_number_state n wall in
     let nn2 = {

@@ -276,6 +276,7 @@ let rec is_nonexpansive expr =
       List.for_all is_nonexpansive e_list
   | Rexpr_merge (e1, e2) ->
       is_nonexpansive e1 && is_nonexpansive e2
+  | Rexpr_ocaml _ -> true
   | _ -> false
 
 and is_nonexpansive_conf c =
@@ -996,6 +997,7 @@ let rec type_of_expression env expr =
         | Rconf_and (_, _) | Rconf_or (_, _) ->
             non_event_patt_err config
         end
+    | Rexpr_ocaml _ -> new_var(), react_epsilon()
   in
   expr.expr_type <- t;
   expr.expr_reactivity_effect <- k;

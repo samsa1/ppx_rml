@@ -511,8 +511,7 @@ let rec translate env e =
 	raise (Internal (e.pexpr_loc,
 			 "Parse2reac.translate: expr"))
 
-		| Pexpr_ocaml _ -> raise (Internal (e.pexpr_loc,
-		"Parse2reac.translate: ocaml expr"))
+		| Pexpr_ocaml expr -> Rexpr_ocaml expr
   in
   make_expr rexpr e.pexpr_loc
 

@@ -75,6 +75,7 @@ and expression_desc =
       (ident * type_expression option)
 	* (signal_kind * expression * expression) option * expression
   | Coexpr_exec of expression
+  | Coexpr_ocaml of Ppxlib.expression
 
 (* Process expressions *)
 and process =

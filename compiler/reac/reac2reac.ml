@@ -55,6 +55,7 @@ let expr_map  =
     let loc = expr.expr_loc in
     let expr' =
       match expr.expr_desc with
+      | Rexpr_ocaml _ -> f expr
       | Rexpr_local _ -> f expr
 
       | Rexpr_global _ -> f expr
@@ -408,6 +409,7 @@ let translate_merge =
     | Rexpr_local _
     | Rexpr_global _
     | Rexpr_constant _
+    | Rexpr_ocaml _
     | Rexpr_let _
     | Rexpr_function _
     | Rexpr_apply _

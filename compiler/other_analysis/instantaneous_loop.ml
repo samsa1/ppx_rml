@@ -209,6 +209,7 @@ let instantaneous_loop_expr =
 	  end
 
       | Rexpr_constant _ -> Env.empty
+			| Rexpr_ocaml _ -> Env.empty
 
 (*
       | Rexpr_let (Nonrecursive, patt_expr_list, expr) ->

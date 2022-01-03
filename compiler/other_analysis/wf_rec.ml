@@ -56,6 +56,7 @@ let rec check_patt_expr (patt, expr) =
     | Rexpr_tuple _
     | Rexpr_record _
     | Rexpr_process _
+    | Rexpr_ocaml _
     | Rexpr_nothing ->
 	  ()
     | Rexpr_local _

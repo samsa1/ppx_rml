@@ -149,6 +149,7 @@ let check_expr_one expr =
   | Rexpr_local _
   | Rexpr_global _
   | Rexpr_constant _
+  | Rexpr_ocaml _
   | Rexpr_let (_, _, _)
   | Rexpr_function _| Rexpr_apply (_, _)| Rexpr_tuple _| Rexpr_construct (_, _)
   | Rexpr_array _

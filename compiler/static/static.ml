@@ -120,6 +120,8 @@ let rec static_expr ctx e =
 
     | Rexpr_constant _im -> Static
 
+		| Rexpr_ocaml _expr -> Static
+
     | Rexpr_let (Recursive, patt_expr_list, e1) ->
 	if static_expr_list static_expr max snd ML patt_expr_list = Static
 	then static_expr ctx e1

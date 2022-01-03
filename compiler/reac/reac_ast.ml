@@ -101,6 +101,7 @@ and expression_desc =
   | Rexpr_await of immediate_flag * event_config
   | Rexpr_await_val of
      immediate_flag * await_kind * event_config * expression option * expression
+  | Rexpr_ocaml of Ppxlib.expression
 
 (* event configuration *)
 and event_config =

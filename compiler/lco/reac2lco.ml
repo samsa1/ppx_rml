@@ -176,6 +176,8 @@ let rec translate_ml e =
 
     | Rexpr_constant im -> Coexpr_constant im
 
+    | Rexpr_ocaml expr -> Coexpr_ocaml expr
+
     | Rexpr_let (flag, patt_expr_list, expr) ->
 	Coexpr_let (flag,
 		    List.map
@@ -469,6 +471,7 @@ and translate_proc p =
         | Rexpr_local _
         | Rexpr_global _
         | Rexpr_constant _
+        | Rexpr_ocaml _
         | Rexpr_function _
         | Rexpr_apply (_, _)
         | Rexpr_tuple _

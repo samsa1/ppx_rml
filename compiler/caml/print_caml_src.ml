@@ -158,6 +158,7 @@ let priority exp =
   | Cexpr_global _ | Cexpr_constant _ | Cexpr_array _  | Cexpr_constraint _ )
     -> 5
   | (Cexpr_record_access _ | Cexpr_tuple _) -> 6
+  | Cexpr_ocaml _ -> -1
   | _ -> 4
 
 let priority_pattern p =
@@ -179,6 +180,7 @@ let rec print pri e =
   if pri > pri_e then pp_print_string !formatter  "(";
   begin match e.cexpr_desc with
     Cexpr_constant(im) -> print_immediate im
+  | Cexpr_ocaml(str) -> pp_print_string !formatter str
   | Cexpr_global(gl) -> print_global gl
   | Cexpr_local(s) -> print_name (Rml_ident.unique_name s)
   | Cexpr_construct(gl,None) -> print_global gl

@@ -49,7 +49,9 @@ let constant_propagation =
 
       | Cexpr_constant _c -> expr.cexpr_desc
 
-      | Cexpr_let (Nonrecursive, patt_expr_list, expression) ->
+			| Cexpr_ocaml _expr -> expr.cexpr_desc
+
+			| Cexpr_let (Nonrecursive, patt_expr_list, expression) ->
 	  let patt_expr_list' =
 	    List.rev_map
 	      (fun (patt,expr) -> (patt, constant_propagation env expr))

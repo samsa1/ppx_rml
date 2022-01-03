@@ -19,7 +19,7 @@ let process spam n =
 let process catch p =
   (* Here, both s3 and s4 won't ever be present (never emitted) but it shows the macro works :tm: *)
   let%await _ = when_cond ((i1 = s && i2 = s2) || (i1, i2) = s3 || [i1; i2] = s4) (i1 + i2 >= 0)  in
-  let%await _ = i3 = s in
+  let%await i3 = s in
   p := (i1 * ratio * ratio + i2 * ratio + i3)
 
 

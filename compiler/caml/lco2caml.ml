@@ -139,6 +139,8 @@ let rec translate_ml e =
 
     | Coexpr_constant im -> Cexpr_constant im
 
+    | Coexpr_ocaml expr -> Cexpr_ocaml (Ppxlib.Pprintast.string_of_expression expr)
+
     | Coexpr_let (flag, patt_expr_list, expr) ->
 	Cexpr_let (flag,
 		   List.map

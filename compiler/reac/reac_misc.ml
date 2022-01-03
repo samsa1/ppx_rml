@@ -153,6 +153,8 @@ let expr_free_vars e =
 
     | Rexpr_constant _ -> ()
 
+    | Rexpr_ocaml _ -> ()
+
     | Rexpr_let (rec_flag, patt_expr_list, expr) ->
 	let vars' =
 	  List.fold_left
