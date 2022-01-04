@@ -1,4 +1,4 @@
-(rule (target await2.ml) (action (run ../compiler/rmlc.exe await2.rml)))
+(rule (target await2.ml) (deps (file await2.rml)) (action (run ../compiler/rmlc.exe await2.rml)))
 
 (executable
  (name pp)

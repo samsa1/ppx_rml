@@ -41,6 +41,7 @@
 (rule (target rml_parse.ml) (action (copy parsing/rml_parse.ml rml_parse.ml)))
 (rule (target rml_parser.mly) (action (copy parsing/rml_parser.mly rml_parser.mly)))
 (rule (target rml_lexer.mll) (action (copy parsing/rml_lexer.mll rml_lexer.mll)))
+(rule (target linenum.mll) (action (copy parsing/linenum.mll linenum.mll)))
 
 (rule (target binding_errors.ml) (action (copy reac/binding_errors.ml binding_errors.ml)))
 (rule (target parse2reac.ml) (action (copy reac/parse2reac.ml parse2reac.ml)))
@@ -74,7 +75,7 @@
 (rule (target lucky_errors.ml) (action (copy external/lucky_errors.ml lucky_errors.ml)))
 
 (ocamllex
- (modules rml_lexer))
+ (modules rml_lexer linenum))
 
 (menhir
  (modules rml_parser))
