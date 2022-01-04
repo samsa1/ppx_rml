@@ -1,3 +1,5 @@
+(rule (target await2.ml) (action (run ../compiler/rmlc.exe await2.rml)))
+
 (executable
  (name pp)
  (promote (until-clean))
