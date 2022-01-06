@@ -1,6 +1,6 @@
 build:
 	dune build stdlib
-	RML_RECOMPILE_RZI=0 dune build 
+	RML_RECOMPILE_RZI=0 dune build compiler tools interpreter toplevel
 
 test: build
 	dune runtest

@@ -20,8 +20,9 @@ depends: [
   "dune" {>= "1.6.3"}
   "menhir"
   "ppxlib" {>= "0.20.0"}
-  "alcotest"
+  "alcotest" {with-test}
 ]
+
 synopsis: "Reactive ML"
 description: """
 ReactiveML ppx version
