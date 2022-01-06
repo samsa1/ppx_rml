@@ -66,7 +66,7 @@ and expression_desc =
   | Cexpr_for of
       ident * expression * expression * direction_flag * expression
   | Cexpr_seq of expression * expression
-  | Cexpr_ocaml of string
+  | Cexpr_ocaml of Ppxlib.expression
 
 (* Patterns *)
 and pattern =

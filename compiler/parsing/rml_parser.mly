@@ -71,7 +71,7 @@ let mkident_loc id loc =
 
 let mksimple id pos =
   { psimple_id = id;
-    psimple_loc = rhs_loc pos; }
+    psimple_loc = loc_of_pos pos; }
 let _mksimple_loc id loc =
   { psimple_id = id;
     psimple_loc = loc; }
@@ -192,9 +192,9 @@ let rec mkrangepatt c1 c2 loc =
 let syntax_error () =
   raise Rml_syntaxerr.Escape_error
 
-let unclosed opening_name opening_num closing_name closing_num =
-  raise(Rml_syntaxerr.Error(Rml_syntaxerr.Unclosed(rhs_loc opening_num, opening_name,
-                                           rhs_loc closing_num, closing_name)))
+let unclosed opening_name opening_loc closing_name closing_loc =
+  raise(Rml_syntaxerr.Error(Rml_syntaxerr.Unclosed(loc_of_pos opening_loc, opening_name,
+                                           loc_of_pos closing_loc, closing_name)))
 
 %}
 
@@ -458,17 +458,17 @@ structure_item:
   | TYPE type_declarations
       { mkimpl(Pimpl_type(List.rev $2)) $loc  }
   | EXCEPTION UIDENT constructor_arguments
-      { mkimpl(Pimpl_exn(mksimple $2 2, $3)) $loc  }
+      { mkimpl(Pimpl_exn(mksimple $2 ($startpos($2), $endpos($2)), $3)) $loc  }
   | EXCEPTION UIDENT EQUAL constr_longident
-      { mkimpl(Pimpl_exn_rebind(mksimple $2 2, $4)) $loc  }
+      { mkimpl(Pimpl_exn_rebind(mksimple $2 ($startpos($2), $endpos($2)), $4)) $loc  }
   | OPEN UIDENT
       { mkimpl(Pimpl_open $2) $loc  }
   | EXTERNAL DOT LIDENT LIDENT lucky_declarations lucky_declarations
       EQUAL lucky_files
       { match $3 with
         | "luc" ->
-	    mkimpl(Pimpl_lucky(mksimple $4 4, List.rev $5, List.rev $6, $8)) $loc 
-	| _ -> raise (Rml_syntaxerr.Error(Rml_syntaxerr.Other (rhs_loc 1)))
+	    mkimpl(Pimpl_lucky(mksimple $4 ($startpos($4), $endpos($4)), List.rev $5, List.rev $6, $8)) $loc 
+	| _ -> raise (Rml_syntaxerr.Error(Rml_syntaxerr.Other (loc_of_pos ($startpos($1), $endpos($1)))))
       }
 ;
 
@@ -487,7 +487,7 @@ signature_item:
   | TYPE type_declarations
       { mkintf(Pintf_type(List.rev $2)) $loc }
   | EXCEPTION UIDENT constructor_arguments
-      { mkintf(Pintf_exn(mksimple $2 2, $3)) $loc }
+      { mkintf(Pintf_exn(mksimple $2 ($startpos($2), $endpos($2)), $3)) $loc }
   | OPEN UIDENT
       { mkintf(Pintf_open $2) $loc }
 ;
@@ -615,15 +615,15 @@ expr:
       { mkexpr(Pexpr_present($2, ghexpr(Pexpr_nothing) $loc, $4)) $loc }
   | AWAIT await_flag event_config %prec above_IN
       { if (snd $2) = One
-        then raise(Rml_syntaxerr.Error(Rml_syntaxerr.Other (rhs_loc 2)))
+        then raise(Rml_syntaxerr.Error(Rml_syntaxerr.Other (loc_of_pos ($startpos($2), $endpos($2)))))
         else mkexpr(Pexpr_await(fst $2, $3)) $loc }
   | AWAIT await_flag event_config IN par_expr
       { match $2 with
-        | Immediate, All -> raise(Rml_syntaxerr.Error(Rml_syntaxerr.Other (rhs_loc 2)))
+        | Immediate, All -> raise(Rml_syntaxerr.Error(Rml_syntaxerr.Other (loc_of_pos ($startpos($2), $endpos($2)))))
 	| im, k -> mkexpr(Pexpr_await_val(im, k, $3, None, $5)) $loc }
   | AWAIT await_flag event_config WHEN par_expr IN par_expr
       { match $2 with
-        | Immediate, All -> raise(Rml_syntaxerr.Error(Rml_syntaxerr.Other (rhs_loc 2)))
+        | Immediate, All -> raise(Rml_syntaxerr.Error(Rml_syntaxerr.Other (loc_of_pos ($startpos($2), $endpos($2)))))
 	| im, k ->
 	    mkexpr(Pexpr_await_val(im, k, $3, Some $5, $7)) $loc }
   | PROCESS proc_def
@@ -646,13 +646,13 @@ simple_expr:
   | LPAREN par_expr RPAREN
       { reloc_expr $2 $loc }
   | LPAREN par_expr error
-      { unclosed "(" 1 ")" 3 }
+      { unclosed "(" ($startpos($1), $endpos($1)) ")" ($startpos($3), $endpos($3)) }
   | BEGIN par_expr END
       { reloc_expr $2 $loc }
   | BEGIN END
       { mkexpr (Pexpr_constant Const_unit) $loc }
   | BEGIN par_expr error
-      { unclosed "begin" 1 "end" 3 }
+      { unclosed "begin" ($startpos($1), $endpos($1)) "end" ($startpos($3), $endpos($3)) }
   | LPAREN par_expr type_constraint RPAREN
       { mkexpr(Pexpr_constraint($2, $3)) $loc }
   | simple_expr DOT label_longident
@@ -661,28 +661,28 @@ simple_expr:
       { mkexpr(Pexpr_apply(ghexpr(Pexpr_ident(array_function "Array" "get")) $loc,
                            [$1; $4])) $loc }
   | simple_expr DOT LPAREN par_expr error
-      { unclosed "(" 3 ")" 5 }
+      { unclosed "(" ($startpos($3), $endpos($3)) ")" ($startpos($5), $endpos($5)) }
   | simple_expr DOT LBRACKET par_expr RBRACKET
       { mkexpr(Pexpr_apply(ghexpr(Pexpr_ident(array_function "String" "get")) $loc,
                            [$1; $4])) $loc }
   | simple_expr DOT LBRACKET par_expr error
-      { unclosed "[" 3 "]" 5 }
+      { unclosed "[" ($startpos($3), $endpos($3)) "]" ($startpos($5), $endpos($5)) }
   | LBRACE record_expr RBRACE
       { mkexpr(Pexpr_record($2)) $loc }
   | LBRACE record_expr error
-      { unclosed "{" 1 "}" 5 }
+      { unclosed "{" ($startpos($1), $endpos($1)) "}" ($startpos($3), $endpos($3)) }
   | LBRACE simple_expr WITH record_expr RBRACE
       { mkexpr(Pexpr_record_with ($2, $4)) $loc }
   | LBRACKETBAR expr_semi_list opt_semi BARRBRACKET
       { mkexpr(Pexpr_array(List.rev $2)) $loc }
   | LBRACKETBAR expr_semi_list opt_semi error
-      { unclosed "[|" 1 "|]" 4 }
+      { unclosed "[|" ($startpos($1), $endpos($1)) "|]" ($startpos($4), $endpos($4)) }
   | LBRACKETBAR BARRBRACKET
       { mkexpr(Pexpr_array []) $loc }
   | LBRACKET expr_semi_list opt_semi RBRACKET
       { reloc_expr (mktailexpr $loc (List.rev $2)) $loc }
   | LBRACKET expr_semi_list opt_semi error
-      { unclosed "[" 1 "]" 4 }
+      { unclosed "[" ($startpos($1), $endpos($1)) "]" ($startpos($4), $endpos($4)) }
   | PREFIXOP simple_expr
       { mkexpr(Pexpr_apply(mkoperator $1 ($startpos($1), $endpos($1)), [$2])) $loc }
   | NOTHING
@@ -713,7 +713,7 @@ simple_expr:
 			[mkexpr (Pexpr_constant Const_unit)])),
 		  mkexpr Pexpr_pause))
 !!!!!!!!!! *)
-	| _ -> raise (Rml_syntaxerr.Error(Rml_syntaxerr.Other (rhs_loc 2))) }
+	| _ -> raise (Rml_syntaxerr.Error(Rml_syntaxerr.Other (loc_of_pos ($startpos($2), $endpos($2))))) }
 ;
 very_simple_expr: /* simple_expr without "LPAREN expr RPAREN" */
     val_longident
@@ -727,35 +727,35 @@ very_simple_expr: /* simple_expr without "LPAREN expr RPAREN" */
   | BEGIN END
       { mkexpr (Pexpr_constant Const_unit) $loc }
   | BEGIN par_expr error
-      { unclosed "begin" 1 "end" 3 }
+      { unclosed "begin" ($startpos($1), $endpos($1)) "end" ($startpos($3), $endpos($3)) }
   | very_simple_expr DOT label_longident
       { mkexpr(Pexpr_record_access($1, $3)) $loc }
   | very_simple_expr DOT LPAREN par_expr RPAREN
       { mkexpr(Pexpr_apply(ghexpr(Pexpr_ident(array_function "Array" "get")) $loc,
                            [$1; $4])) $loc }
   | very_simple_expr DOT LPAREN par_expr error
-      { unclosed "(" 3 ")" 5 }
+      { unclosed "(" ($startpos($3), $endpos($3)) ")" ($startpos($5), $endpos($5)) }
   | very_simple_expr DOT LBRACKET par_expr RBRACKET
       { mkexpr(Pexpr_apply(ghexpr(Pexpr_ident(array_function "String" "get")) $loc,
                            [$1; $4])) $loc }
   | very_simple_expr DOT LBRACKET par_expr error
-      { unclosed "[" 3 "]" 5 }
+      { unclosed "[" ($startpos($3), $endpos($3)) "]" ($startpos($5), $endpos($5)) }
   | LBRACE record_expr RBRACE
       { mkexpr(Pexpr_record($2)) $loc }
   | LBRACE record_expr error
-      { unclosed "{" 1 "}" 5 }
+      { unclosed "{" ($startpos($1), $endpos($1)) "}" ($startpos($3), $endpos($3)) }
   | LBRACE simple_expr WITH record_expr RBRACE
       { mkexpr(Pexpr_record_with ($2, $4)) $loc }
   | LBRACKETBAR expr_semi_list opt_semi BARRBRACKET
       { mkexpr(Pexpr_array(List.rev $2)) $loc }
   | LBRACKETBAR expr_semi_list opt_semi error
-      { unclosed "[|" 1 "|]" 4 }
+      { unclosed "[|" ($startpos($1), $endpos($1)) "|]" ($startpos($4), $endpos($4)) }
   | LBRACKETBAR BARRBRACKET
       { mkexpr(Pexpr_array []) $loc }
   | LBRACKET expr_semi_list opt_semi RBRACKET
       { reloc_expr (mktailexpr $loc (List.rev $2)) $loc }
   | LBRACKET expr_semi_list opt_semi error
-      { unclosed "[" 1 "]" 4 }
+      { unclosed "[" ($startpos($1), $endpos($1)) "]" ($startpos($4), $endpos($4)) }
   | PREFIXOP simple_expr
       { mkexpr(Pexpr_apply(mkoperator $1 ($startpos($1), $endpos($1)), [$2])) $loc }
   | NOTHING
@@ -786,7 +786,7 @@ very_simple_expr: /* simple_expr without "LPAREN expr RPAREN" */
 			[mkexpr (Pexpr_constant Const_unit)])),
 		  mkexpr Pexpr_pause))
 !!!!!!!!!! *)
-	| _ -> raise (Rml_syntaxerr.Error(Rml_syntaxerr.Other (rhs_loc 2))) }
+	| _ -> raise (Rml_syntaxerr.Error(Rml_syntaxerr.Other (loc_of_pos ($startpos($2), $endpos($2))))) }
 ;
 pre_expr:
     simple_expr
@@ -806,7 +806,7 @@ event_config:
   | LPAREN event_config RPAREN
       { $2 }
   | LPAREN event_config error
-      { unclosed "(" 1 ")" 3 }
+      { unclosed "(" ($startpos($1), $endpos($1)) ")" ($startpos($3), $endpos($3)) }
 ;
 simple_expr_list:
     simple_expr
@@ -820,16 +820,16 @@ let_bindings:
 /* !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! */
   | val_longident LESS pattern GREATER
       {	[$3, { pexpr_desc = Pexpr_get (mkexpr(Pexpr_ident $1) $loc);
-	       pexpr_loc = rhs_loc 1; }] }
+	       pexpr_loc = loc_of_pos ($startpos($1), $endpos($1)); }] }
 /* !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! */
 ;
 let_binding:
     val_ident fun_binding
-      { ({ppatt_desc = Ppatt_var $1; ppatt_loc = rhs_loc 1}, $2) }
+      { ({ppatt_desc = Ppatt_var $1; ppatt_loc = loc_of_pos ($startpos($1), $endpos($1))}, $2) }
   | pattern EQUAL par_expr
       { ($1, $3) }
   | PROCESS val_ident proc_binding
-      { ({ppatt_desc = Ppatt_var $2; ppatt_loc = rhs_loc 2}, $3) }
+      { ({ppatt_desc = Ppatt_var $2; ppatt_loc = loc_of_pos ($startpos($2), $endpos($2))}, $3) }
 ;
 fun_binding:
     strict_binding
@@ -957,25 +957,25 @@ simple_pattern:
   | LBRACE lbl_pattern_list opt_semi RBRACE
       { mkpatt(Ppatt_record(List.rev $2)) $loc }
   | LBRACE lbl_pattern_list opt_semi error
-      { unclosed "{" 1 "}" 4 }
+      { unclosed "{" ($startpos($1), $endpos($1)) "}" ($startpos($4), $endpos($4)) }
   | LBRACKET pattern_semi_list opt_semi RBRACKET
       { reloc_patt (mktailpatt $loc (List.rev $2)) $loc }
   | LBRACKET pattern_semi_list opt_semi error
-      { unclosed "[" 1 "]" 4 }
+      { unclosed "[" ($startpos($1), $endpos($1)) "]" ($startpos($4), $endpos($4)) }
   | LBRACKETBAR pattern_semi_list opt_semi BARRBRACKET
       { mkpatt(Ppatt_array(List.rev $2)) $loc }
   | LBRACKETBAR BARRBRACKET
       { mkpatt(Ppatt_array []) $loc }
   | LBRACKETBAR pattern_semi_list opt_semi error
-      { unclosed "[|" 1 "|]" 4 }
+      { unclosed "[|" ($startpos($1), $endpos($1)) "|]" ($startpos($4), $endpos($4)) }
   | LPAREN pattern RPAREN
       { reloc_patt $2 $loc }
   | LPAREN pattern error
-      { unclosed "(" 1 ")" 3 }
+      { unclosed "(" ($startpos($1), $endpos($1)) ")" ($startpos($3), $endpos($3)) }
   | LPAREN pattern COLON core_type RPAREN
       { mkpatt(Ppatt_constraint($2, $4)) $loc }
   | LPAREN pattern COLON core_type error
-      { unclosed "(" 1 ")" 5 }
+      { unclosed "(" ($startpos($1), $endpos($1)) ")" ($startpos($5), $endpos($5)) }
 ;
 
 pattern_comma_list:
@@ -1007,7 +1007,7 @@ type_declarations:
 
 type_declaration:
     type_parameters LIDENT type_kind
-      { (mksimple $2 2, $1, $3) }
+      { (mksimple $2 ($startpos($2), $endpos($2)), $1, $3) }
 ;
 type_kind:
     /*empty*/
@@ -1097,7 +1097,7 @@ core_type_list:
   | core_type_list STAR simple_core_type        { $3 :: $1 }
 ;
 label:
-    LIDENT                                      { mksimple $1 1 }
+    LIDENT                                      { mksimple $1 ($startpos($1), $endpos($1)) }
 ;
 
 /* Constants */
@@ -1124,13 +1124,13 @@ ident:
   | LIDENT                                      { $1 }
 ;
 val_ident:
-    LIDENT                                      { mksimple $1 1 }
-  | LPAREN operator RPAREN                      { mksimple $2 2 }
+    LIDENT                                      { mksimple $1 ($startpos($1), $endpos($1)) }
+  | LPAREN operator RPAREN                      { mksimple $2 ($startpos($2), $endpos($2)) }
 ;
 val_ident_colon:
-    LIDENT COLON                                { mksimple $1 1 }
-  | LPAREN operator RPAREN COLON                { mksimple $2 2 }
-  | LABEL                                       { mksimple $1 1 }
+    LIDENT COLON                                { mksimple $1 ($startpos($1), $endpos($1)) }
+  | LPAREN operator RPAREN COLON                { mksimple $2 ($startpos($2), $endpos($2)) }
+  | LABEL                                       { mksimple $1 ($startpos($1), $endpos($1)) }
 ;
 operator:
     PREFIXOP                                    { $1 }
@@ -1152,9 +1152,9 @@ operator:
   | COLONEQUAL                                  { ":=" }
 ;
 constr_ident:
-    UIDENT                                      { mksimple $1 1 }
+    UIDENT                                      { mksimple $1 ($startpos($1), $endpos($1)) }
 /*  | LBRACKET RBRACKET                           { "[]" } */
-  | COLONCOLON                                  { mksimple "::" 1 }
+  | COLONCOLON                                  { mksimple "::" ($startpos($1), $endpos($1)) }
 ;
 
 val_longident:
@@ -1186,9 +1186,9 @@ type_longident:
 
 /* Signals */
 signal_decl:
-    LIDENT                                      { (mksimple $1 1, None) }
+    LIDENT                                      { (mksimple $1 ($startpos($1), $endpos($1)), None) }
   | LIDENT COLON core_type
-      { (mksimple $1 1, Some $3) }
+      { (mksimple $1 ($startpos($1), $endpos($1)), Some $3) }
 ;
 signal_comma_list:
     signal_decl                                 { [$1] }
@@ -1254,15 +1254,15 @@ lucky_declaration:
     lucky_label COLON core_type                 { ($1, $3) }
 ;
 lucky_label:
-    LIDENT                                      { mksimple $1 1 }
-  | UIDENT                                      { mksimple $1 1 }
+    LIDENT                                      { mksimple $1 ($startpos($1), $endpos($1)) }
+  | UIDENT                                      { mksimple $1 ($startpos($1), $endpos($1)) }
 ;
 /* string list */
 lucky_files:
   | LBRACKET string_semi_list opt_semi RBRACKET
       { List.rev $2 }
   | LBRACKET string_semi_list opt_semi error
-      { unclosed "[" 1 "]" 4 }
+      { unclosed "[" ($startpos($1), $endpos($1)) "]" ($startpos($4), $endpos($4)) }
 ;
 string_semi_list:
     constant

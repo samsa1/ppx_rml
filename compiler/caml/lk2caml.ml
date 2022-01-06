@@ -187,7 +187,7 @@ let rec translate_ml e =
 
     | Kexpr_constant im -> Cexpr_constant im
 
-    | Kexpr_ocaml expr -> Cexpr_ocaml (Ppxlib.Pprintast.string_of_expression expr)
+    | Kexpr_ocaml expr -> Cexpr_ocaml expr
 
 		| Kexpr_let (flag, patt_expr_list, expr) ->
 	Cexpr_let (flag,

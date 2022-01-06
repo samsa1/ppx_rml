@@ -180,7 +180,7 @@ let rec print pri e =
   if pri > pri_e then pp_print_string !formatter  "(";
   begin match e.cexpr_desc with
     Cexpr_constant(im) -> print_immediate im
-  | Cexpr_ocaml(str) -> pp_print_string !formatter str
+  | Cexpr_ocaml(str) -> Ppxlib.Pprintast.expression !formatter str
   | Cexpr_global(gl) -> print_global gl
   | Cexpr_local(s) -> print_name (Rml_ident.unique_name s)
   | Cexpr_construct(gl,None) -> print_global gl
