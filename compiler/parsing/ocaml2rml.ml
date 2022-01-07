@@ -387,20 +387,21 @@ and translate_expr expr =
                     | Ppat_construct ({txt = Lident "All"; _ }, None) ->
                       let event, when_expr = get_when_simple vb.pvb_expr in
                       Pexpr_await_val (Nonimmediate, All, event_of_expr event, translate_expropt when_expr, translate_expr in_expr);
-                    | _ -> Location.raise_errorf ~loc:vb.pvb_pat.ppat_loc "Invalid token, only `One` and `All` are allowed"
+                    | _ -> Location.raise_errorf ~loc:vb.pvb_pat.ppat_loc "Invalid syntax, only `One` and `All` are allowed"
                   else
                     Location.raise_errorf ~loc "Unsupported attributes"
                 end
             | Pstr_eval (expr, attributes) ->
               if attributes = []
               then Pexpr_await (Nonimmediate, event_of_expr expr)
-              else Location.raise_errorf ~loc "Unsupported attributes" 
-            | _ -> assert false
+              else Location.raise_errorf ~loc "Unsupported attributes"
+            | _ -> Location.raise_errorf ~loc "Invalid syntax" 
           end
         | "await_immediate", PStr [stri] -> begin
           match stri.pstr_desc with
-            | Pstr_eval ({pexp_desc = Pexp_let (Nonrecursive, [vb], in_expr); _}, []) ->
-                begin match vb.pvb_pat.ppat_desc with
+            | Pstr_eval ({pexp_desc = Pexp_let (Nonrecursive, [vb], in_expr); _}, attributes) ->
+                if attributes = [] then
+                  match vb.pvb_pat.ppat_desc with
                   | Ppat_construct ({txt = Lident "One"; _ }, None) ->
                     assert false; (* These don't work for now *)
                     let event, when_expr = get_when_simple vb.pvb_expr in
@@ -409,11 +410,13 @@ and translate_expr expr =
                     assert false; (* These don't work for now *)
                     let event, when_expr = get_when_simple vb.pvb_expr in
                     Pexpr_await_val (Immediate, All, event_of_expr event, translate_expropt when_expr, translate_expr in_expr);
-                  | _ -> assert false
-                end
-            | Pstr_eval (expr, []) ->
-              Pexpr_await (Immediate, event_of_expr expr)
-            | _ -> assert false
+                  | _ -> Location.raise_errorf ~loc "Invalid syntax, only `One` and `All` are allowed"
+                else Location.raise_errorf ~loc "Invalid syntax, unsupported attributes"
+            | Pstr_eval (expr, attributes) ->
+              if attributes = []
+              then Pexpr_await (Immediate, event_of_expr expr)
+              else Location.raise_errorf ~loc "Unsupported attributes"
+            | _ -> Location.raise_errorf ~loc "Invalid syntax"
           end
         | "signal", PStr [stri] ->
             begin match stri.pstr_desc with
@@ -433,17 +436,19 @@ and translate_expr expr =
             end
         | "until", PStr [stri] ->
           begin match stri.pstr_desc with
-            | Pstr_eval ({pexp_desc = Pexp_try (expr, cases); _}, []) ->
-              Pexpr_until (translate_expr expr,
-                List.map (fun case -> (event_of_patt_ext_event case.pc_lhs, translate_expropt case.pc_guard, Some (translate_expr case.pc_rhs))) cases)
-            | _ -> assert false
+            | Pstr_eval ({pexp_desc = Pexp_try (expr, cases); _}, attributes) ->
+              if attributes = []
+              then Pexpr_until (translate_expr expr,
+                  List.map (fun case -> (event_of_patt_ext_event case.pc_lhs, translate_expropt case.pc_guard, Some (translate_expr case.pc_rhs))) cases)
+              else
+                Location.raise_errorf ~loc "Invalid syntax, unsupported attributes" 
+            | _ -> Location.raise_errorf ~loc "Invalid syntax"
           end
         | "ocaml", PStr [stri] ->
           begin match stri.pstr_desc with
             | Pstr_eval (expr, []) -> Pexpr_ocaml expr
-            | _ -> assert false 
+            | _ -> Location.raise_errorf ~loc "Invalid syntax"
           end
-        | "until", _ | "signal", _ | "await", _ | "para", _ | "par", _ -> Location.raise_errorf ~loc "Invalid extension payload" 
         | "present", PStr [stri] -> begin
           match stri.pstr_desc with
             | Pstr_eval (expr, []) ->
@@ -455,10 +460,11 @@ and translate_expr expr =
                   | None -> {pexpr_desc= Pexpr_nothing; pexpr_loc= expr.pexp_loc}
                 in 
                   Pexpr_present (event_of_expr if_expr, translate_expr _then, else_expr)
-                | _ -> assert false
+                | _ -> Location.raise_errorf ~loc "Invalid syntax"
               end
-            | _ -> assert false
+            | _ -> Location.raise_errorf ~loc "Invalid syntax"
           end
+        | "until", _ | "signal", _ | "await", _ | "para", _ | "par", _  | "ocaml", _ | "present", _ -> Location.raise_errorf ~loc "Invalid extension payload" 
         | _, _ -> Location.raise_errorf ~loc:name.loc "extension %s is not supported" name.txt
       end
   in {pexpr_desc; pexpr_loc = expr.pexp_loc}
@@ -510,9 +516,9 @@ let impl_item_of_str_item stri =
     | Pstr_type (_, type_declaration_list) ->
         Pimpl_type (List.map sident_strlist_tdecl_of_tdecl type_declaration_list)
     | Pstr_extension ((name, payload), attributes) ->
-        let () = if attributes <> []
+        if attributes = []
         then Location.raise_errorf ~loc "Attributes are not supported in rml"
-        in begin match (name.txt, payload) with
+        else begin match (name.txt, payload) with
           | "para", PStr [stri] | "par", PStr [stri] ->
             begin match stri.pstr_desc with
               | Pstr_eval _ -> assert false
