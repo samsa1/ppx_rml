@@ -43,22 +43,22 @@
 /* The parser definition */
 
 %{
-open Location
+(*open Location*)
 open Rml_asttypes
 open Parse_ident
 open Parse_ast
 open Ppxlib
 
 let loc_of_pos (ps, pe) = {
-    loc_start = ps;
-    loc_end = pe;
-    loc_ghost = false;
+    Location.loc_start = ps;
+    Location.loc_end = pe;
+    Location.loc_ghost = false;
 }
 
 let gloc_of_pos (ps, pe) = {
-    loc_start = ps;
-    loc_end = pe;
-    loc_ghost = true;
+    Location.loc_start = ps;
+    Location.loc_end = pe;
+    Location.loc_ghost = true;
 }
 
 let mkident id (ps, pe) =
@@ -148,7 +148,7 @@ let mkuminus name arg pos1 =
 
 let rec mktailexpr loc = function
     [] ->
-      ghexpr(Pexpr_construct( mkident_loc (Pident "[]") none, None)) loc
+      ghexpr(Pexpr_construct( mkident_loc (Pident "[]") Location.none, None)) loc
   | e1 :: el ->
       let exp_el = mktailexpr loc el in
       let l = {loc_start = e1.pexpr_loc.loc_start;
@@ -164,7 +164,7 @@ let rec mktailexpr loc = function
 
 let rec mktailpatt loc = function
     [] ->
-      ghpatt(Ppatt_construct(mkident_loc (Pident "[]") none, None)) loc
+      ghpatt(Ppatt_construct(mkident_loc (Pident "[]") Location.none, None)) loc
   | p1 :: pl ->
       let pat_pl = mktailpatt loc pl in
       let l = {loc_start = p1.ppatt_loc.loc_start;
@@ -177,7 +177,7 @@ let rec mktailpatt loc = function
        ppatt_loc = l}
 
 let array_function str name =
-  mkident_loc (Pdot(str, name)) none
+  mkident_loc (Pdot(str, name)) Location.none
 
 let rec deep_mkrangepatt c1 c2 loc =
   if c1 = c2 then ghpatt(Ppatt_constant(Const_char c1)) loc else
