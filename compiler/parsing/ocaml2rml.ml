@@ -249,26 +249,20 @@ and translate_expropt = function
   | Some expr -> Some (translate_expr expr)
 and pat_expop_exp_of_case case =
   (translate_patt case.pc_lhs, translate_expropt case.pc_guard, translate_expr case.pc_rhs)
-and event_of_expr str_op expr =
+and event_of_expr expr =
     let pconf_desc = match expr.pexp_desc with
       | Pexp_apply ({pexp_desc = Pexp_ident {txt = Lident "||"; _}; _}, [(Nolabel, e1); (Nolabel, e2)])
-        -> Pconf_or (event_of_expr str_op e1, event_of_expr None e2)
+        -> Pconf_or (event_of_expr e1, event_of_expr e2)
       | Pexp_apply ({pexp_desc = Pexp_ident {txt = Lident "&&"; _}; _}, [(Nolabel, e1); (Nolabel, e2)])
-        -> Pconf_and (event_of_expr str_op e1, event_of_expr None e2)
+        -> Pconf_and (event_of_expr e1, event_of_expr e2)
       | Pexp_apply ({pexp_desc = Pexp_ident {txt = Lident "="; _}; _}, [(Nolabel, e1); (Nolabel, e2)])
         ->
-          if str_op <> None
-          then Location.raise_errorf ~loc:expr.pexp_loc "Invalid syntax"
-          else Pconf_present (translate_expr e2, Some (pattern_of_expr e1))
-      | _ ->
-        begin match str_op with
-          | None -> Pconf_present (translate_expr expr, None)
-          | Some str -> Pconf_present (translate_expr expr, Some ({ppatt_desc = Ppatt_var (simple_ident_of_string_loc str); ppatt_loc = expr.pexp_loc}))
-        end
+          Pconf_present (translate_expr e2, Some (pattern_of_expr e1))
+      | _ -> Pconf_present (translate_expr expr, None)
     in {pconf_desc; pconf_loc = expr.pexp_loc}
 and event_of_patt_ext_event patt = match patt.ppat_desc with
   | Ppat_extension ({txt = "event"; _}, PStr [{pstr_desc = Pstr_eval (expr, []); _}]) ->
-    event_of_expr None expr
+    event_of_expr expr
   | _ -> Location.raise_errorf ~loc:patt.ppat_loc "Invalid syntax, expected [%%event expr]"
 and translate_expr expr =
   let loc = expr.pexp_loc in
@@ -384,29 +378,32 @@ and translate_expr expr =
           match stri.pstr_desc with
             | Pstr_eval ({pexp_desc = Pexp_let (Nonrecursive, [vb], in_expr); _}, []) ->
                 begin match vb.pvb_pat.ppat_desc with
-                  | Ppat_any ->
-                      let event, when_expr = get_when_simple vb.pvb_expr in
-                      Pexpr_await_val (Nonimmediate, All, event_of_expr None event, translate_expropt when_expr, translate_expr in_expr);
-                  | Ppat_var str ->
-                    Pexpr_await_val (Nonimmediate, All, event_of_expr (Some str) vb.pvb_expr, None, translate_expr in_expr);
+                  | Ppat_var {txt = "One"; _ } ->
+                    Pexpr_await_val (Nonimmediate, One, event_of_expr vb.pvb_expr, None, translate_expr in_expr);
+                  | Ppat_var {txt = "All"; _ } ->
+                    Pexpr_await_val (Nonimmediate, All, event_of_expr vb.pvb_expr, None, translate_expr in_expr);
                   | _ -> assert false
                 end
             | Pstr_eval (expr, []) ->
-                Pexpr_await (Nonimmediate, event_of_expr None expr)
+                Pexpr_await (Nonimmediate, event_of_expr expr)
             | _ -> assert false
           end
         | "await_immediate", PStr [stri] -> begin
           match stri.pstr_desc with
             | Pstr_eval ({pexp_desc = Pexp_let (Nonrecursive, [vb], in_expr); _}, []) ->
                 begin match vb.pvb_pat.ppat_desc with
-                  | Ppat_any ->
-                      assert false; (* These don't work for now *)
-                      let event, when_expr = get_when_simple vb.pvb_expr in
-                      Pexpr_await_val (Immediate, One, event_of_expr None event, translate_expropt when_expr, translate_expr in_expr);
+                  | Ppat_var { txt = "One"; _ } ->
+                    assert false; (* These don't work for now *)
+                    let event, when_expr = get_when_simple vb.pvb_expr in
+                    Pexpr_await_val (Immediate, One, event_of_expr event, translate_expropt when_expr, translate_expr in_expr);
+                  | Ppat_var { txt = "All"; _ } ->
+                    assert false; (* These don't work for now *)
+                    let event, when_expr = get_when_simple vb.pvb_expr in
+                    Pexpr_await_val (Immediate, All, event_of_expr event, translate_expropt when_expr, translate_expr in_expr);
                   | _ -> assert false
                 end
             | Pstr_eval (expr, []) ->
-              Pexpr_await (Immediate, event_of_expr None expr)
+              Pexpr_await (Immediate, event_of_expr expr)
             | _ -> assert false
           end
         | "signal", PStr [stri] ->
@@ -432,6 +429,11 @@ and translate_expr expr =
                 List.map (fun case -> (event_of_patt_ext_event case.pc_lhs, translate_expropt case.pc_guard, Some (translate_expr case.pc_rhs))) cases)
             | _ -> assert false
           end
+        | "ocaml", PStr [stri] ->
+          begin match stri.pstr_desc with
+            | Pstr_eval (expr, []) -> Pexpr_ocaml expr
+            | _ -> assert false 
+          end
         | "until", _ | "signal", _ | "await", _ | "para", _ | "par", _ -> Location.raise_errorf ~loc "Invalid extension payload" 
         | "present", PStr [stri] -> begin
           match stri.pstr_desc with
@@ -443,7 +445,7 @@ and translate_expr expr =
                   | Some e -> translate_expr e
                   | None -> {pexpr_desc= Pexpr_nothing; pexpr_loc= expr.pexp_loc}
                 in 
-                  Pexpr_present (event_of_expr None if_expr, translate_expr _then, else_expr)
+                  Pexpr_present (event_of_expr if_expr, translate_expr _then, else_expr)
                 | _ -> assert false
               end
             | _ -> assert false
@@ -522,7 +524,7 @@ let impl_item_of_str_item stri =
                 | _ -> assert false
                 end
               | _ -> assert false
-            end 
+            end
           | _, _ -> assert false
         end
     | Pstr_primitive _ | Pstr_typext _ | Pstr_exception _ | Pstr_module _
