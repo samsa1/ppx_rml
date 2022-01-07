@@ -7,5 +7,6 @@ let () =
       ("Await_when", Await.test_set);
       ("Await_rml", Await2test.test_set);
       ("Pre", Pre.test_set);
-      ("Last", Last.test_set)
+      ("Last", Last.test_set);
+      ("Outside deps", Ocaml_ppx.test_set)
     ]

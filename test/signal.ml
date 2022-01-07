@@ -22,8 +22,8 @@
 
   let process catch p =
     (* Here, both s3 and s4 won't ver be present (never emitted) but it shows the macro works :tm: *)
-    let%await _ = (i1 = s && i2 = s2) || (i1, i2) = s3 || [i1; i2] = s4 in
-    let%await i3 = s in
+    let%await All = (i1 = s && i2 = s2) || (i1, i2) = s3 || [i1; i2] = s4 in
+    let%await All = i3 = s in
     p := (i1 * ratio * ratio + i2 * ratio + i3)
 
 

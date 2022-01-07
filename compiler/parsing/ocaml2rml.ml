@@ -83,6 +83,7 @@ let rec translate_core_type ctype =
         RmlPtype_process ({pte_desc = RmlPtype_tuple (List.map translate_core_type ctypel2); pte_loc = lident.loc}, Def_static.Instantaneous)
       | _ -> RmlPtype_constr (ident_of_lident lident, List.map translate_core_type ctypel)
       end
+  | Ptyp_poly ([], ctype) -> (translate_core_type ctype).pte_desc
   | Ptyp_object _ | Ptyp_class _ | Ptyp_alias _ | Ptyp_variant _
   | Ptyp_poly _ | Ptyp_package _ | Ptyp_extension _ ->
     Location.raise_errorf ~loc:ctype.ptyp_loc "Unsupported type in rml"
@@ -378,11 +379,13 @@ and translate_expr expr =
           match stri.pstr_desc with
             | Pstr_eval ({pexp_desc = Pexp_let (Nonrecursive, [vb], in_expr); _}, []) ->
                 begin match vb.pvb_pat.ppat_desc with
-                  | Ppat_var {txt = "One"; _ } ->
-                    Pexpr_await_val (Nonimmediate, One, event_of_expr vb.pvb_expr, None, translate_expr in_expr);
-                  | Ppat_var {txt = "All"; _ } ->
-                    Pexpr_await_val (Nonimmediate, All, event_of_expr vb.pvb_expr, None, translate_expr in_expr);
-                  | _ -> assert false
+                  | Ppat_construct ({txt = Lident "One"; _ }, None) ->
+                    let event, when_expr = get_when_simple vb.pvb_expr in
+                    Pexpr_await_val (Nonimmediate, One, event_of_expr event, translate_expropt when_expr, translate_expr in_expr);
+                  | Ppat_construct ({txt = Lident "All"; _ }, None) ->
+                    let event, when_expr = get_when_simple vb.pvb_expr in
+                    Pexpr_await_val (Nonimmediate, All, event_of_expr event, translate_expropt when_expr, translate_expr in_expr);
+                  | _ -> Location.raise_errorf ~loc:vb.pvb_pat.ppat_loc "Invalid token, only `One` and `All` are allowed"
                 end
             | Pstr_eval (expr, []) ->
                 Pexpr_await (Nonimmediate, event_of_expr expr)
@@ -392,11 +395,11 @@ and translate_expr expr =
           match stri.pstr_desc with
             | Pstr_eval ({pexp_desc = Pexp_let (Nonrecursive, [vb], in_expr); _}, []) ->
                 begin match vb.pvb_pat.ppat_desc with
-                  | Ppat_var { txt = "One"; _ } ->
+                  | Ppat_construct ({txt = Lident "One"; _ }, None) ->
                     assert false; (* These don't work for now *)
                     let event, when_expr = get_when_simple vb.pvb_expr in
                     Pexpr_await_val (Immediate, One, event_of_expr event, translate_expropt when_expr, translate_expr in_expr);
-                  | Ppat_var { txt = "All"; _ } ->
+                  | Ppat_construct ({txt = Lident "All"; _ }, None) ->
                     assert false; (* These don't work for now *)
                     let event, when_expr = get_when_simple vb.pvb_expr in
                     Pexpr_await_val (Immediate, All, event_of_expr event, translate_expropt when_expr, translate_expr in_expr);
