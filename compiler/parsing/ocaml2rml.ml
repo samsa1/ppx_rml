@@ -377,18 +377,24 @@ and translate_expr expr =
             end
         | "await", PStr [stri] -> begin
           match stri.pstr_desc with
-            | Pstr_eval ({pexp_desc = Pexp_let (Nonrecursive, [vb], in_expr); _}, []) ->
-                begin match vb.pvb_pat.ppat_desc with
-                  | Ppat_construct ({txt = Lident "One"; _ }, None) ->
-                    let event, when_expr = get_when_simple vb.pvb_expr in
-                    Pexpr_await_val (Nonimmediate, One, event_of_expr event, translate_expropt when_expr, translate_expr in_expr);
-                  | Ppat_construct ({txt = Lident "All"; _ }, None) ->
-                    let event, when_expr = get_when_simple vb.pvb_expr in
-                    Pexpr_await_val (Nonimmediate, All, event_of_expr event, translate_expropt when_expr, translate_expr in_expr);
-                  | _ -> Location.raise_errorf ~loc:vb.pvb_pat.ppat_loc "Invalid token, only `One` and `All` are allowed"
+            | Pstr_eval ({pexp_desc = Pexp_let (Nonrecursive, [vb], in_expr); _}, attributes) ->
+                begin 
+                  if attributes = [] then
+                    match vb.pvb_pat.ppat_desc with
+                    | Ppat_construct ({txt = Lident "One"; _ }, None) ->
+                      let event, when_expr = get_when_simple vb.pvb_expr in
+                      Pexpr_await_val (Nonimmediate, One, event_of_expr event, translate_expropt when_expr, translate_expr in_expr);
+                    | Ppat_construct ({txt = Lident "All"; _ }, None) ->
+                      let event, when_expr = get_when_simple vb.pvb_expr in
+                      Pexpr_await_val (Nonimmediate, All, event_of_expr event, translate_expropt when_expr, translate_expr in_expr);
+                    | _ -> Location.raise_errorf ~loc:vb.pvb_pat.ppat_loc "Invalid token, only `One` and `All` are allowed"
+                  else
+                    Location.raise_errorf ~loc "Unsupported attributes"
                 end
-            | Pstr_eval (expr, []) ->
-                Pexpr_await (Nonimmediate, event_of_expr expr)
+            | Pstr_eval (expr, attributes) ->
+              if attributes = []
+              then Pexpr_await (Nonimmediate, event_of_expr expr)
+              else Location.raise_errorf ~loc "Unsupported attributes" 
             | _ -> assert false
           end
         | "await_immediate", PStr [stri] -> begin
