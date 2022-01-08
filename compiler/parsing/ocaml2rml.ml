@@ -93,12 +93,14 @@ let get_when_simple expr = match expr.pexp_desc with
   | Pexp_apply ({pexp_desc = Pexp_ident {txt = Lident "when_cond"; _}; _}, arglabel_expr_list) ->
     begin
     match arglabel_expr_list with
-      | [] -> assert false (* Should not happen *)
+      | [] -> Location.raise_errorf "Bug in handling of `when_cond`: no args detected" (* Should never happen*)
       | [(Nolabel, expr1); (Nolabel, expr2)] -> expr1, Some expr2
-      | (_, {pexp_loc; _})::_ -> Location.raise_errorf ~loc:pexp_loc "Labelled arguments are not allowed in rml"
+      | (_, {pexp_loc; _})::_ -> Location.raise_errorf ~loc:pexp_loc "`when_cond` is only supposed to take 2 args: the pattern and the condition."
     end
   | _ -> expr, None
 
+  (* This never gets called*)
+  (* TODO remove *)
 let get_immediate expr = match expr.pexp_desc with
   | Pexp_apply ({pexp_desc = Pexp_ident {txt = Lident "immediate"; _}; _}, arglabel_expr_list) ->
     (Immediate,
@@ -133,7 +135,7 @@ let get_one_when ~loc expr = match expr.pexp_desc with
   | Pexp_apply ({pexp_desc = Pexp_ident {txt = Lident "one"; _}; _}, arglabel_expr_list) ->
     begin
       match arglabel_expr_list with
-        | [] -> assert false (* Should not happen *)
+        | [] -> Location.raise_errorf ~loc "`when` expects an argument" (* Should not happen *)
         | [(label, expr)] ->
           let () = if label <> Nolabel
           then Location.raise_errorf ~loc "Invalid syntax"
@@ -190,9 +192,9 @@ let rec translate_patt patt =
   in {ppatt_desc; ppatt_loc = patt.ppat_loc}
 let rec expression_of_pattern patt =
   let pexpr_desc = match patt.ppat_desc with
-    | Ppat_any -> assert false
+    | Ppat_any -> Location.raise_errorf ~loc:patt.ppat_loc"Invalid pattern: Ppat_any."
     | Ppat_var str -> Pexpr_ident {pident_id= Pident str.txt; pident_loc = patt.ppat_loc}
-    | Ppat_alias (patt, name) -> assert false
+    | Ppat_alias (patt, name) -> Location.raise_errorf ~loc:patt.ppat_loc "Invalid pattern: Ppat_alias."
     | Ppat_constant c -> Pexpr_constant (immediate_of_constant ~loc:patt.ppat_loc c)
     | Ppat_tuple pattl -> Pexpr_tuple (List.map expression_of_pattern pattl)
     | Ppat_construct (lident, namel_patt_opt) ->
@@ -206,7 +208,7 @@ let rec expression_of_pattern patt =
     | Ppat_record (lident_patt_l, Closed) -> Pexpr_record (List.map (fun (lident, patt) -> (ident_of_lident lident, expression_of_pattern patt)) lident_patt_l)
     | Ppat_record (_lident_patt_l, Open) -> Location.raise_errorf ~loc:patt.ppat_loc "Unsupported opened record in rml"
     | Ppat_array pattl -> Pexpr_array (List.map expression_of_pattern pattl)
-    | Ppat_or (patt1, patt2) -> assert false
+    | Ppat_or (patt1, patt2) -> Location.raise_errorf ~loc:patt.ppat_loc"Invalid pattern: Ppat_or."
     | Ppat_constraint (patt, ctype) -> Pexpr_constraint (expression_of_pattern patt, translate_core_type ctype)
     | Ppat_interval _ | Ppat_variant _ | Ppat_type _ | Ppat_lazy _
     | Ppat_unpack _ | Ppat_exception _ | Ppat_extension _ | Ppat_open _ ->
@@ -239,11 +241,11 @@ and pattern_of_expr expr =
   let loc = expr.pexp_loc in
   let ppatt_desc = match expr.pexp_desc with
     | Pexp_ident {txt = Lident str; loc} -> Ppatt_var ({psimple_loc = loc; psimple_id = str})
-    | Pexp_ident _ -> assert false
+    | Pexp_ident _ -> Location.raise_errorf ~loc:loc "Invalid expression in pattern: Pexp_ident."
     | Pexp_construct (lident, None) -> Ppatt_construct (ident_of_lident lident, None)
     | Pexp_construct (lident, Some expr) -> Ppatt_construct (ident_of_lident lident, Some (pattern_of_expr expr))
     | Pexp_tuple exprl -> Ppatt_tuple (List.map pattern_of_expr exprl)
-  | _ -> assert false
+    | _ -> Location.raise_errorf ~loc:loc "Invalid expression in pattern."
   in {ppatt_desc; ppatt_loc = loc}
 and translate_expropt = function
   | None -> None
@@ -289,56 +291,49 @@ and translate_expr expr =
       begin match expr.pexp_desc with
         | Pexp_ident {txt = Lident "emit"; _} ->
           begin match arglabel_expr_list with
-            | [] -> assert false (* should never happen *)
             | [(Nolabel, signal_expr)] -> Pexpr_emit (translate_expr signal_expr)
             | [(Nolabel, signal_expr); (Nolabel, info_expr)] -> Pexpr_emit_val (translate_expr signal_expr, translate_expr info_expr)
-            | _::_::_::_ -> Location.raise_errorf ~loc "emit takes at most 2 arguments"
-            | _ -> Location.raise_errorf ~loc "emit only takes unlabelled arguments"
+            | _ -> Location.raise_errorf ~loc "emit only takes (up to 2) unlabelled arguments"
           end
         | Pexp_ident {txt = Lident "run"; _} ->
           begin match arglabel_expr_list with
-            | [] -> assert false (* should never happen *)
             | [(Nolabel, proc)] -> Pexpr_run (translate_expr proc)
-            | _ -> Location.raise_errorf  ~loc "run requires single unlabelled argument"
+            | _ -> Location.raise_errorf  ~loc "run requires a single, unlabelled, argument"
           end
         | Pexp_ident {txt = Lident "default"; _} ->
           begin match arglabel_expr_list with
-            | [] -> assert false (* should never happen *)
             | [(Nolabel, proc)] -> Pexpr_default (translate_expr proc)
-            | _ -> Location.raise_errorf  ~loc "default requires single unlabelled argument"
+            | _ -> Location.raise_errorf  ~loc "default requires a single, unlabelled, argument"
           end
         | Pexp_ident {txt = Lident "last"; _} ->
           begin match arglabel_expr_list with
-            | [] -> assert false (* should never happen *)
             | [(Nolabel, proc)] -> Pexpr_last (translate_expr proc)
-            | _ -> Location.raise_errorf  ~loc "last requires single unlabelled argument"
+            | _ -> Location.raise_errorf  ~loc "last requires a single, unlabelled, argument"
           end
         | Pexp_ident {txt = Lident "pre_value"; _} ->
           begin match arglabel_expr_list with
-            | [] -> assert false (* should never happen *)
             | [(Nolabel, proc)] -> Pexpr_pre (Value, translate_expr proc)
-            | _ -> Location.raise_errorf  ~loc "pre_value requires single unlabelled argument"
+            | _ -> Location.raise_errorf  ~loc "pre_value requires a single, unlabelled, argument"
           end
         | Pexp_ident {txt = Lident "pre_status"; _} ->
           begin match arglabel_expr_list with
-            | [] -> assert false (* should never happen *)
             | [(Nolabel, proc)] -> Pexpr_pre (Status, translate_expr proc)
-            | _ -> Location.raise_errorf  ~loc "pre_status requires single unlabelled argument"
+            | _ -> Location.raise_errorf  ~loc "pre_status requires a single, unlabelled, argument"
           end
         | Pexp_ident {txt = Lident "||"; _} ->
           begin match arglabel_expr_list with
             | [(Nolabel, e1); (Nolabel, e2)] -> Pexpr_par (translate_expr e1, translate_expr e2)
-            | _ -> Location.raise_errorf ~loc "|| is a syntax operator that takes exactly 2 arguments"
+            | _ -> Location.raise_errorf ~loc "|| is a syntax operator that takes exactly 2, unlabelled, arguments"
           end
         | Pexp_ident {txt = Lident "await"; _} ->
           begin match arglabel_expr_list with 
             | [(Nolabel, e1)] -> Pexpr_await (Nonimmediate, event_of_expr e1)
-            | _ -> Location.raise_errorf ~loc "`await` requires exactly 1 argument"
+            | _ -> Location.raise_errorf ~loc "`await` requires exactly a single, unlabelled, argument"
           end
         | Pexp_ident {txt = Lident "await_immediate"; _} ->
           begin match arglabel_expr_list with 
             | [(Nolabel, e1)] -> Pexpr_await (Immediate, event_of_expr e1)
-            | _ -> Location.raise_errorf ~loc "`await_immediate` requires exactly 1 argument"
+            | _ -> Location.raise_errorf ~loc "`await_immediate` requires exactly a single, unlabelled, argument"
           end
         | _ -> Pexpr_apply (translate_expr expr, List.map (fun (al, expr) -> let () = if al <> Nolabel then Location.raise_errorf ~loc "Labelled arguments are not supported in rml" in translate_expr expr) arglabel_expr_list)
         (* TODO implemented Pexpr_merge = expr |> expr *)
@@ -381,9 +376,9 @@ and translate_expr expr =
               | Pstr_eval (expr, []) ->
                 begin match expr.pexp_desc with
                   | Pexp_for (pat, expr1, expr2, dir, expr3) -> Pexpr_fordopar (simple_ident_of_pat pat, translate_expr expr1, translate_expr expr2, dir, translate_expr expr3)
-                  | _ -> assert false
+                  | _ -> Location.raise_errorf ~loc "`para` can only be applied on `for` constructions."
                 end
-              | _ -> assert false
+              | _ -> Location.raise_errorf ~loc "`para` can only be applied on `for` constructions."
             end
         | "await", PStr [stri] -> begin
           match stri.pstr_desc with
@@ -435,9 +430,9 @@ and translate_expr expr =
                 | Pexp_record ([({txt = Lident "gather"; _}, expr_gather); ({txt = Lident "memory"; _}, expr_memory)], None) ->
                     Pexpr_signal (sident_typeoptL_of_patt vb.pvb_pat, Some (Memory, translate_expr expr_memory, translate_expr expr_gather), translate_expr in_expr)
                 | Pexp_record _ -> Pexpr_signal (sident_typeoptL_of_patt vb.pvb_pat, None, translate_expr in_expr)
-                | _ -> assert false
+                | _ -> Location.raise_errorf ~loc "Invalid construction for `signal`: expecting a record with (default, gather) or (memory, gather) fields or an unit expression."
                 end
-              | _ -> assert false 
+              | _ -> Location.raise_errorf ~loc "Invalid construction for `signal`: expecting a non-recusrive `let ... in ...` construction."
             end
         | "until", PStr [stri] ->
           begin match stri.pstr_desc with
@@ -479,9 +474,9 @@ let sident_strlist_tdecl_of_tdecl ptype =
   let sident = simple_ident_of_string_loc ptype.ptype_name in
   if ptype.ptype_manifest <> None (*|| ptype.ptype_params <> []*) || ptype.ptype_cstrs <> []
     || ptype.ptype_attributes <> [] || ptype.ptype_private <> Public
-  then Location.raise_errorf ~loc "Unsupported type syntax";
+  then Location.raise_errorf ~loc "Unsupported type syntax.";
   let tdecl = match ptype.ptype_kind with
-    | Ptype_abstract -> Location.raise_errorf ~loc "Unimplemented in rml due to lack of exemples"
+    | Ptype_abstract -> Location.raise_errorf ~loc "Unimplemented in rml due to lack of exemples."
     | Ptype_variant const_declL ->
         RmlPtype_variant (List.map (fun cstr_decl ->
           let () = assert (cstr_decl.pcd_attributes = []) in
@@ -490,7 +485,7 @@ let sident_strlist_tdecl_of_tdecl ptype =
           match cstr_decl.pcd_args with
           | Pcstr_tuple [] -> None
           | Pcstr_tuple l -> Some ({pte_desc = RmlPtype_tuple (List.map translate_core_type l); pte_loc = cstr_decl.pcd_loc})
-          | Pcstr_record _ -> assert false
+          | Pcstr_record _ -> Location.raise_errorf ~loc "Records are not supported."
           )) const_declL)
     | Ptype_record label_declL ->
         RmlPtype_record (List.map
@@ -509,6 +504,7 @@ let sident_strlist_tdecl_of_tdecl ptype =
       ) ptype.ptype_params
   in (sident, strlist, tdecl)
 
+  (* TODO remove these WIPs *)
 let impl_item_of_str_item stri =
   let loc = stri.pstr_loc in
   let pimpl_desc = match stri.pstr_desc with
@@ -521,14 +517,14 @@ let impl_item_of_str_item stri =
     | Pstr_type (_, type_declaration_list) ->
         Pimpl_type (List.map sident_strlist_tdecl_of_tdecl type_declaration_list)
     | Pstr_extension ((name, payload), attributes) ->
-        if attributes != []
-        then Location.raise_errorf ~loc "Attributes are not supported in rml"
+        if attributes <> []
+        then Location.raise_errorf ~loc "Attributes are not supported in rml."
         else begin match (name.txt, payload) with
           | "para", PStr [stri] | "par", PStr [stri] ->
             begin match stri.pstr_desc with
-              | Pstr_eval _ -> assert false
-              | Pstr_value (_rec_flag, _vb_list) -> assert false
-              | _ -> assert false
+              | Pstr_eval _ -> Location.raise_errorf ~loc "WIP."
+              | Pstr_value (_rec_flag, _vb_list) -> Location.raise_errorf ~loc "WIP."
+              | _ -> Location.raise_errorf ~loc "Invalid construction for `para`."
             end
           | "signal", PStr [stri] ->
             begin match stri.pstr_desc with
@@ -541,11 +537,11 @@ let impl_item_of_str_item stri =
                 | Pexp_record ([({txt = Lident "memory"; _}, expr_memory); ({txt = Lident "gather"; _}, expr_gather)], None)
                 | Pexp_record ([({txt = Lident "gather"; _}, expr_gather); ({txt = Lident "memory"; _}, expr_memory)], None) ->
                     Pimpl_signal (sident_typeoptL_of_patt vb.pvb_pat, Some (Memory, translate_expr expr_memory, translate_expr expr_gather))
-                | _ -> assert false
+                | _ -> Location.raise_errorf ~loc "Invalid construction for `signal`: expecting a record with (default, gather) or (memory, gather) fields or an unit expression."
                 end
-              | _ -> assert false
+              | _ -> Location.raise_errorf ~loc "Invalid construction for `signal`: expecting a non-recusrive `let ... in ...` construction."
             end
-          | _, _ -> assert false
+          | _, _ -> Location.raise_errorf ~loc "Undefined derivation call."
         end
     | Pstr_primitive _ | Pstr_typext _ | Pstr_exception _ | Pstr_module _
     | Pstr_recmodule _ | Pstr_modtype _ | Pstr_open _ | Pstr_class _

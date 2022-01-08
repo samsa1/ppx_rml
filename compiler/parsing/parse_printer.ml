@@ -348,7 +348,7 @@ let rec expression i ppf x =
   | Pexpr_default s ->
       line i ppf "Pexpr_default\n";
       expression i ppf s
-  | Pexpr_ocaml _ -> assert false;
+  | Pexpr_ocaml _ -> Location.raise_errorf "OCaml expression print: WIP.";
 
 and event_config i ppf cfg =
   match cfg.pconf_desc with

@@ -442,7 +442,7 @@ and comment = parse
       }
   | "*)"
       { match !comment_start_loc with
-        | [] -> assert false
+        | [] -> Location.raise_errorf ~loc:(Location.curr lexbuf) "Should never happen."
         | [_x] -> comment_start_loc := [];
         | _ :: l -> comment_start_loc := l;
                     comment lexbuf;
@@ -453,7 +453,7 @@ and comment = parse
         begin try string lexbuf
         with Error (Unterminated_string, _) ->
           match !comment_start_loc with
-          | [] -> assert false
+          | [] -> Location.raise_errorf ~loc:(Location.curr lexbuf) "Should never happen."
           | loc :: _ -> comment_start_loc := [];
                         raise (Error (Unterminated_string_in_comment, loc))
         end;
@@ -475,7 +475,7 @@ and comment = parse
       { comment lexbuf }
   | eof
       { match !comment_start_loc with
-        | [] -> assert false
+        | [] -> Location.raise_errorf ~loc:(Location.curr lexbuf) "Should never happen."
         | loc :: _ -> comment_start_loc := [];
                       raise (Error (Unterminated_comment, loc))
       }
