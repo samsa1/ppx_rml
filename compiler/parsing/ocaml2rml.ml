@@ -90,6 +90,7 @@ let rec translate_core_type ctype =
   in {pte_desc; pte_loc = ctype.ptyp_loc}
 
 let get_when_simple expr = match expr.pexp_desc with
+
   | Pexp_apply ({pexp_desc = Pexp_ident {txt = Lident "when_cond"; _}; _}, arglabel_expr_list) ->
     begin
     match arglabel_expr_list with
@@ -98,6 +99,29 @@ let get_when_simple expr = match expr.pexp_desc with
       | (_, {pexp_loc; _})::_ -> Location.raise_errorf ~loc:pexp_loc "`when_cond` is only supposed to take 2 args: the pattern and the condition."
     end
   | _ -> expr, None
+
+let get_when_simple2 expr = match expr.pexp_desc with
+  | Pexp_apply (exp, arglabel_expr_list) ->
+    begin
+    match arglabel_expr_list with
+      | [] -> Location.raise_errorf "Bug in handling of `When`: no args detected" (* Should never happen*)
+      | [(Nolabel, {pexp_desc = Pexp_construct ({txt = Lident "When"; _ }, optional_condition); pexp_loc = expr_loc})] -> 
+        begin
+          exp, optional_condition
+        end
+      | [(Nolabel, {pexp_desc = Pexp_construct ({txt = Lident "When"; _ }, optional_condition); pexp_loc = expr_loc}); (Nolabel, exp2)] -> 
+        begin
+          exp, (
+            match optional_condition with 
+            | Some e' -> Some e'
+            | None -> Some exp2
+          )
+        end
+      | _ -> expr, None
+    end
+  | _ -> expr, None
+ 
+  
 
   (* This never gets called*)
   (* TODO remove *)
@@ -387,10 +411,10 @@ and translate_expr expr =
                   if attributes = [] then
                     match vb.pvb_pat.ppat_desc with
                     | Ppat_construct ({txt = Lident "One"; _ }, None) ->
-                      let event, when_expr = get_when_simple vb.pvb_expr in
+                      let event, when_expr = get_when_simple2 vb.pvb_expr in
                       Pexpr_await_val (Nonimmediate, One, event_of_expr event, translate_expropt when_expr, translate_expr in_expr);
                     | Ppat_construct ({txt = Lident "All"; _ }, None) ->
-                      let event, when_expr = get_when_simple vb.pvb_expr in
+                      let event, when_expr = get_when_simple2 vb.pvb_expr in
                       Pexpr_await_val (Nonimmediate, All, event_of_expr event, translate_expropt when_expr, translate_expr in_expr);
                     | _ -> Location.raise_errorf ~loc:vb.pvb_pat.ppat_loc "Invalid syntax, only `One` and `All` are allowed"
                   else
