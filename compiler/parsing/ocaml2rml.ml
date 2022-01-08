@@ -330,6 +330,16 @@ and translate_expr expr =
             | [(Nolabel, e1); (Nolabel, e2)] -> Pexpr_par (translate_expr e1, translate_expr e2)
             | _ -> Location.raise_errorf ~loc "|| is a syntax operator that takes exactly 2 arguments"
           end
+        | Pexp_ident {txt = Lident "await"; _} ->
+          begin match arglabel_expr_list with 
+            | [(Nolabel, e1)] -> Pexpr_await (Nonimmediate, event_of_expr e1)
+            | _ -> Location.raise_errorf ~loc "`await` requires exactly 1 argument"
+          end
+        | Pexp_ident {txt = Lident "await_immediate"; _} ->
+          begin match arglabel_expr_list with 
+            | [(Nolabel, e1)] -> Pexpr_await (Immediate, event_of_expr e1)
+            | _ -> Location.raise_errorf ~loc "`await_immediate` requires exactly 1 argument"
+          end
         | _ -> Pexpr_apply (translate_expr expr, List.map (fun (al, expr) -> let () = if al <> Nolabel then Location.raise_errorf ~loc "Labelled arguments are not supported in rml" in translate_expr expr) arglabel_expr_list)
         (* TODO implemented Pexpr_merge = expr |> expr *)
       end

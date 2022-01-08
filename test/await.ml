@@ -23,7 +23,13 @@ let process catch p =
   let%await_immediate One = _i = s5 in 
   let%await All = when_cond ((i1 = s && i2 = s2) || (i1, i2) = s3 || [i1; i2] = s4) (i1 + i2 >= 0)  in
   let%await All = i3 = s in
-  p := (i1 * ratio * ratio + i2 * ratio + i3)
+  begin
+    emit s5 0;
+    await_immediate s5;
+    await s5;
+    p := (i1 * ratio * ratio + i2 * ratio + i3)
+  end
+  
 
 let process compare n =
   let p = ref 0 in run (spam n) || run (catch p); !p
