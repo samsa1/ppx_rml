@@ -516,7 +516,7 @@ let impl_item_of_str_item stri =
     | Pstr_type (_, type_declaration_list) ->
         Pimpl_type (List.map sident_strlist_tdecl_of_tdecl type_declaration_list)
     | Pstr_extension ((name, payload), attributes) ->
-        if attributes = []
+        if attributes != []
         then Location.raise_errorf ~loc "Attributes are not supported in rml"
         else begin match (name.txt, payload) with
           | "para", PStr [stri] | "par", PStr [stri] ->
