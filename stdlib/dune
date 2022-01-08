@@ -30,5 +30,6 @@
 (rule (target sys.rzi) (deps stdlib.rzi ../compiler/rmlc.exe) (mode (promote (until-clean))) (action (run ../compiler/rmlc.exe -c sys.rmli)))
 (rule (target unix.rzi) (deps stdlib.rzi ../compiler/rmlc.exe) (mode (promote (until-clean))) (action (run ../compiler/rmlc.exe -c unix.rmli)))
 (rule (target weak.rzi) (deps stdlib.rzi ../compiler/rmlc.exe) (mode (promote (until-clean))) (action (run ../compiler/rmlc.exe -c weak.rmli)))
+(rule (target buffer.rzi) (deps stdlib.rzi ../compiler/rmlc.exe) (mode (promote (until-clean))) (action (run ../compiler/rmlc.exe -c buffer.rmli)))
 
 (rule (target stdlib.rzi) (deps ../compiler/rmlc.exe) (mode (promote (until-clean))) (action (run ../compiler/rmlc.exe -c stdlib.rmli)))
