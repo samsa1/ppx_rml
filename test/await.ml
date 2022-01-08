@@ -7,6 +7,7 @@ let%signal s = {default = 0; gather = fun x y -> x + y}
 let%signal s2 = {default = 1; gather = fun x y -> x * y}
 let%signal s3 = {default = (0, 0); gather = fun x _ -> x}
 let%signal s4 = {default = []; gather = fun x y -> x :: y}
+let%signal s5 = {default = []; gather = fun x y -> x :: y}
 
 let process spam n = 
   for%par i = 1 to n do
@@ -18,10 +19,11 @@ let process spam n =
 
 let process catch p =
   (* Here, both s3 and s4 won't ever be present (never emitted) but it shows the macro works :tm: *)
+  let _ = emit s5 0 in
+  let%await_immediate One = _i = s5 in 
   let%await All = when_cond ((i1 = s && i2 = s2) || (i1, i2) = s3 || [i1; i2] = s4) (i1 + i2 >= 0)  in
   let%await All = i3 = s in
   p := (i1 * ratio * ratio + i2 * ratio + i3)
-
 
 let process compare n =
   let p = ref 0 in run (spam n) || run (catch p); !p

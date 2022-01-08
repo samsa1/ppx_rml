@@ -403,14 +403,9 @@ and translate_expr expr =
                 if attributes = [] then
                   match vb.pvb_pat.ppat_desc with
                   | Ppat_construct ({txt = Lident "One"; _ }, None) ->
-                    assert false; (* These don't work for now *)
                     let event, when_expr = get_when_simple vb.pvb_expr in
                     Pexpr_await_val (Immediate, One, event_of_expr event, translate_expropt when_expr, translate_expr in_expr);
-                  | Ppat_construct ({txt = Lident "All"; _ }, None) ->
-                    assert false; (* These don't work for now *)
-                    let event, when_expr = get_when_simple vb.pvb_expr in
-                    Pexpr_await_val (Immediate, All, event_of_expr event, translate_expropt when_expr, translate_expr in_expr);
-                  | _ -> Location.raise_errorf ~loc "Invalid syntax, only `One` and `All` are allowed"
+                  | _ -> Location.raise_errorf ~loc "Invalid syntax, only `One` is allowed in `await_immediate`"
                 else Location.raise_errorf ~loc "Invalid syntax, unsupported attributes"
             | Pstr_eval (expr, attributes) ->
               if attributes = []
