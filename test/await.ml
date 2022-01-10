@@ -25,7 +25,7 @@ let process catch p =
   let%await All = i3 = s in
   begin
     emit s5 0;
-    await_immediate (s5 && s5);
+    await Immediate (s5 && s5);
     await (s5 || s5);
     p := (i1 * ratio * ratio + i2 * ratio + i3)
   end

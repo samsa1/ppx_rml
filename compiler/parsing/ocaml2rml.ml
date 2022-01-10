@@ -380,12 +380,10 @@ and translate_expr expr =
         | Pexp_ident {txt = Lident "await"; _} ->
           begin match arglabel_expr_list with 
             | [(Nolabel, e1)] -> Pexpr_await (Nonimmediate, event_of_expr e1)
+            | [(Nolabel, 
+                {pexp_desc = Pexp_construct ({txt = Lident "Immediate"; _ }, _); pexp_loc = _}
+               ); (Nolabel, e2)] -> Pexpr_await (Immediate, event_of_expr e2)
             | _ -> Location.raise_errorf ~loc "`await` requires exactly a single, unlabelled, argument"
-          end
-        | Pexp_ident {txt = Lident "await_immediate"; _} ->
-          begin match arglabel_expr_list with 
-            | [(Nolabel, e1)] -> Pexpr_await (Immediate, event_of_expr e1)
-            | _ -> Location.raise_errorf ~loc "`await_immediate` requires exactly a single, unlabelled, argument"
           end
         | _ -> Pexpr_apply (translate_expr expr, List.map (fun (al, expr) -> let () = if al <> Nolabel then Location.raise_errorf ~loc "Labelled arguments are not supported in rml" in translate_expr expr) arglabel_expr_list)
         (* TODO implemented Pexpr_merge = expr |> expr *)
@@ -459,22 +457,6 @@ and translate_expr expr =
               else Location.raise_errorf ~loc "Unsupported attributes"
             | _ -> Location.raise_errorf ~loc "Invalid syntax" 
           end
-        | "await_immediate", PStr [stri] -> begin
-          match stri.pstr_desc with
-            | Pstr_eval ({pexp_desc = Pexp_let (Nonrecursive, [vb], in_expr); _}, attributes) ->
-                if attributes = [] then
-                  match vb.pvb_pat.ppat_desc with
-                  | Ppat_construct ({txt = Lident "One"; _ }, None) ->
-                    let event, when_expr = get_when_simple vb.pvb_expr in
-                    Pexpr_await_val (Immediate, One, event_of_expr event, translate_expropt when_expr, translate_expr in_expr);
-                  | _ -> Location.raise_errorf ~loc "Invalid syntax, only `One` is allowed in `await_immediate`"
-                else Location.raise_errorf ~loc "Invalid syntax, unsupported attributes"
-            | Pstr_eval (expr, attributes) ->
-              if attributes = []
-              then Pexpr_await (Immediate, event_of_expr expr)
-              else Location.raise_errorf ~loc "Unsupported attributes"
-            | _ -> Location.raise_errorf ~loc "Invalid syntax"
-          end
         | "signal", PStr [stri] ->
             begin match stri.pstr_desc with
               | Pstr_eval ({pexp_desc = Pexp_let (Nonrecursive, [vb], in_expr); _}, []) ->
@@ -539,7 +521,8 @@ and translate_expr expr =
               end
             | _ -> Location.raise_errorf ~loc "Invalid syntax"
           end
-        | "until", _ | "signal", _ | "await", _ | "para", _ | "par", _  | "ocaml", _ | "present", _ -> Location.raise_errorf ~loc "Invalid extension payload" 
+        | "until", _ | "signal", _ | "await", _ | "para", _ | "par", _  | "ocaml", _ | "present", _ 
+        | "when", _ | "control", _ -> Location.raise_errorf ~loc "Invalid extension payload" 
         | _, _ -> Location.raise_errorf ~loc:name.loc "extension %s is not supported" name.txt
       end
   in {pexpr_desc; pexpr_loc = expr.pexp_loc}

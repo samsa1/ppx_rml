@@ -29,7 +29,7 @@ let process catch () =
         global_value := !global_value + 1;
         if%present s2 then a := false;
       done
-    with [%event s] -> ()
+    with [%event s || s && s] -> ()
   end
 
 let process compare n =
