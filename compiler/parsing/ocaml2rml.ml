@@ -141,6 +141,7 @@ let rec get_when_simple3 expr =
             | _ -> Location.raise_errorf ~loc:expr.pexp_loc "Invalid syntax"
           end
         | e1::tl -> let (tl2, cond) = aux tl in (e1 :: tl2, cond)
+        | _ -> Location.raise_errorf ~loc:expr.pexp_loc "Invalid syntax"
       in
       let l2, cond = aux l in
       if l2 = []
