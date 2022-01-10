@@ -121,6 +121,34 @@ let get_when_simple2 expr = match expr.pexp_desc with
     end
   | _ -> expr, None
  
+
+let rec get_when_simple3 expr =
+  let pexp_desc, cond = match expr.pexp_desc with
+    | Pexp_apply ({pexp_desc = Pexp_ident {txt = Lident "||"; loc}; _} as exp2, [(Nolabel, e1); (Nolabel, e2)]) ->
+      let e2, c1 = get_when_simple3 e2 in
+      Pexp_apply ({exp2 with pexp_desc = Pexp_ident {txt = Lident "||"; loc}}, [(Nolabel, e1); (Nolabel, e2)]), c1
+    | Pexp_apply ({pexp_desc = Pexp_ident {txt = Lident "&&"; loc}; _} as exp2, [(Nolabel, e1); (Nolabel, e2)]) ->
+      let e2, c1 = get_when_simple3 e2 in
+      Pexp_apply ({exp2 with pexp_desc = Pexp_ident {txt = Lident "&&"; loc}}, [(Nolabel, e1); (Nolabel, e2)]), c1
+    | Pexp_apply ({pexp_desc = Pexp_ident {txt = Lident "="; loc}; _} as exp2, [(Nolabel, e1); (Nolabel, e2)]) ->
+      let e2, c1 = get_when_simple3 e2 in
+      Pexp_apply ({exp2 with pexp_desc = Pexp_ident {txt = Lident "="; loc}}, [(Nolabel, e1); (Nolabel, e2)]), c1
+    | Pexp_apply (e1, l) ->
+      let rec aux = function
+        | (Nolabel, {pexp_desc = Pexp_construct ({txt = Lident "When"; _}, None); _})::tl ->
+          begin match tl with
+            | [(Nolabel, x)] -> [], Some x
+            | _ -> Location.raise_errorf ~loc:expr.pexp_loc "Invalid syntax"
+          end
+        | e1::tl -> let (tl2, cond) = aux tl in (e1 :: tl2, cond)
+      in
+      let l2, cond = aux l in
+      if l2 = []
+      then e1.pexp_desc, cond
+      else Pexp_apply(e1, l2), cond
+    | pexp -> pexp, None
+
+  in {expr with pexp_desc}, cond
   
 
   (* This never gets called*)
@@ -411,10 +439,10 @@ and translate_expr expr =
                   if attributes = [] then
                     match vb.pvb_pat.ppat_desc with
                     | Ppat_construct ({txt = Lident "One"; _ }, None) ->
-                      let event, when_expr = get_when_simple2 vb.pvb_expr in
+                      let event, when_expr = get_when_simple3 vb.pvb_expr in
                       Pexpr_await_val (Nonimmediate, One, event_of_expr event, translate_expropt when_expr, translate_expr in_expr);
                     | Ppat_construct ({txt = Lident "All"; _ }, None) ->
-                      let event, when_expr = get_when_simple2 vb.pvb_expr in
+                      let event, when_expr = get_when_simple3 vb.pvb_expr in
                       Pexpr_await_val (Nonimmediate, All, event_of_expr event, translate_expropt when_expr, translate_expr in_expr);
                     | _ -> Location.raise_errorf ~loc:vb.pvb_pat.ppat_loc "Invalid syntax, only `One` and `All` are allowed"
                   else
