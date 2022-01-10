@@ -438,6 +438,11 @@ and translate_expr expr =
                 begin 
                   if attributes = [] then
                     match vb.pvb_pat.ppat_desc with
+                    | Ppat_construct ({txt = Lident "Immediate"; _ }, Some {ppat_desc = Ppat_construct ({txt = Lident "One"; _}, None); _}) ->
+                      let event, when_expr = get_when_simple3 vb.pvb_expr in
+                      Pexpr_await_val (Immediate, One, event_of_expr event, translate_expropt when_expr, translate_expr in_expr);
+                    | Ppat_construct ({txt = Lident "Immediate"; _ }, Some {ppat_desc = Ppat_construct ({txt = Lident "All"; _}, None); _}) ->
+                      Location.raise_errorf ~loc:vb.pvb_pat.ppat_loc "Invalid syntax"
                     | Ppat_construct ({txt = Lident "One"; _ }, None) ->
                       let event, when_expr = get_when_simple3 vb.pvb_expr in
                       Pexpr_await_val (Nonimmediate, One, event_of_expr event, translate_expropt when_expr, translate_expr in_expr);
