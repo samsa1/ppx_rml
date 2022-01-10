@@ -501,6 +501,24 @@ and translate_expr expr =
                 Location.raise_errorf ~loc "Invalid syntax, unsupported attributes" 
             | _ -> Location.raise_errorf ~loc "Invalid syntax"
           end
+        | "control", PStr [stri] ->
+          begin match stri.pstr_desc with
+            | Pstr_eval ({pexp_desc = Pexp_try (expr, [case]); _}, attributes) ->
+              if attributes = []
+              then Pexpr_control (event_of_patt_ext_event case.pc_lhs, translate_expropt case.pc_guard, translate_expr expr)
+              else
+                Location.raise_errorf ~loc "Invalid syntax, unsupported attributes" 
+            | _ -> Location.raise_errorf ~loc "Invalid syntax"
+          end
+        | "when", PStr [stri] ->
+          begin match stri.pstr_desc with
+            | Pstr_eval ({pexp_desc = Pexp_try (expr, [case]); _}, attributes) ->
+              if attributes = []
+              then Pexpr_when (event_of_patt_ext_event case.pc_lhs, translate_expr expr)
+              else
+                Location.raise_errorf ~loc "Invalid syntax, unsupported attributes" 
+            | _ -> Location.raise_errorf ~loc "Invalid syntax"
+          end
         | "ocaml", PStr [stri] ->
           begin match stri.pstr_desc with
             | Pstr_eval (expr, []) -> Pexpr_ocaml expr
