@@ -334,6 +334,27 @@ and translate_expr expr =
     | Pexp_constant c ->
       expr_immediate_of_expr_constant ~loc expr c
       
+    | Pexp_let (rf, vb :: vbl, expr) -> 
+      begin
+        print_endline "Loulz";
+        match rf, vb.pvb_expr.pexp_desc with 
+        | Nonrecursive, Pexp_construct ({txt = Lident "Signal"; _}, Some signal_expr) ->
+          
+          begin match signal_expr.pexp_desc with
+          | Pexp_construct ({txt = Lident "()"; _}, None) -> 
+            Pexpr_signal (sident_typeoptL_of_patt vb.pvb_pat, None, translate_expr expr)
+          | Pexp_record ([({txt = Lident "default"; _}, expr_default); ({txt = Lident "gather"; _}, expr_gather)], None)
+          | Pexp_record ([({txt = Lident "gather"; _}, expr_gather); ({txt = Lident "default"; _}, expr_default)], None) ->
+            Pexpr_signal (sident_typeoptL_of_patt vb.pvb_pat, Some (Default, translate_expr expr_default, translate_expr expr_gather), translate_expr expr)
+          | Pexp_record ([({txt = Lident "memory"; _}, expr_memory); ({txt = Lident "gather"; _}, expr_gather)], None)
+          | Pexp_record ([({txt = Lident "gather"; _}, expr_gather); ({txt = Lident "memory"; _}, expr_memory)], None) ->
+              Pexpr_signal (sident_typeoptL_of_patt vb.pvb_pat, Some (Memory, translate_expr expr_memory, translate_expr expr_gather), translate_expr expr)
+          | Pexp_record _ -> 
+            Pexpr_signal (sident_typeoptL_of_patt vb.pvb_pat, None, translate_expr expr)
+          | _ -> Location.raise_errorf ~loc "Invalid construction for `signal`: expecting a record with (default, gather) or (memory, gather) fields or an unit expression."
+          end
+        | _, _ -> Pexpr_let (rf, List.map pat_expr_of_value_binding (vb :: vbl), translate_expr expr)
+      end
     | Pexp_let (rf, vbl, expr) -> Pexpr_let (rf, List.map pat_expr_of_value_binding vbl, translate_expr expr)
     | Pexp_function cases -> Pexpr_function (List.map pat_expop_exp_of_case cases)
     | Pexp_fun (arg_l, exprop, patt, expr) ->
