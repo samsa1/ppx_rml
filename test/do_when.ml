@@ -31,7 +31,7 @@ let process catch () =
         if%present s2 then a := false;
 
       done
-    with [%event s] -> ()
+    with [%event s] -> () (* compilation normally fails when adding `when (0 = 0)` *)
   end
 
 let process compare n =

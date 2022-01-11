@@ -496,10 +496,14 @@ and translate_expr expr =
         | "when", PStr [stri] ->
           begin match stri.pstr_desc with
             | Pstr_eval ({pexp_desc = Pexp_try (expr, [case]); _}, attributes) ->
-              if attributes = []
-              then Pexpr_when (event_of_patt_ext_event case.pc_lhs, translate_expr expr)
-              else
-                Location.raise_errorf ~loc "Invalid syntax, unsupported attributes" 
+              begin
+                match case.pc_guard with
+                | Some e -> Location.raise_errorf ~loc:e.pexp_loc "No branch guard allowed in do..when.. construction" 
+                | None -> if attributes = []
+                  then Pexpr_when (event_of_patt_ext_event case.pc_lhs, translate_expr expr)
+                  else
+                    Location.raise_errorf ~loc "Invalid syntax, unsupported attributes" 
+              end
             | _ -> Location.raise_errorf ~loc "Invalid syntax"
           end
         | "ocaml", PStr [stri] ->
