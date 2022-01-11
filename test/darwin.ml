@@ -84,7 +84,7 @@ let process window (wall : wall) (s : ('a, number_state list) event) : unit proc
   init_graphics wall;
   Graphics.auto_synchronize false;
   while true do
-    let%await ALL = l = s in
+    let%await All = l = s in
     Graphics.clear_graph ();
     List.iter draw_number l;
     draw_wall wall;
