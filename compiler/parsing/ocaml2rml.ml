@@ -358,14 +358,7 @@ and translate_expr expr =
           end
         | _, _ -> Pexpr_let (rf, List.map pat_expr_of_value_binding (vb :: vbl), translate_expr expr)
       end
-    | Pexp_let (rf, vb :: vbl, expr) -> begin
-      let descent = translate_expr begin 
-        match vbl with 
-        | [] -> expr
-        | _ -> {expr with pexp_desc = Pexp_let (Nonrecursive, vbl, expr)}
-      end in
-      Pexpr_let (rf, List.map pat_expr_of_value_binding vbl, translate_expr expr)
-    end
+    | Pexp_let (rf, vb :: vbl, expr) -> Pexpr_let (rf, List.map pat_expr_of_value_binding vbl, translate_expr expr)
     | Pexp_function cases -> Pexpr_function (List.map pat_expop_exp_of_case cases)
     | Pexp_fun (arg_l, exprop, patt, expr) ->
         let () = if arg_l <> Nolabel || exprop <> None
