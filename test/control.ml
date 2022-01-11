@@ -25,7 +25,7 @@ let process catch n =
         global_value := !global_value + 1;
         if%present s2 then a := false;
       done
-    with [%event a = s] when a = n -> () (* Can add a guard condition *)
+    with [%event (a = s) || (a = s2)] when a = n -> () (* Can add a guard condition *)
   end
 
 let process compare n m =
