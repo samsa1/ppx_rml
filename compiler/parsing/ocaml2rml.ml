@@ -90,6 +90,7 @@ let rec translate_core_type ctype =
   in {pte_desc; pte_loc = ctype.ptyp_loc}
 
 let get_when_simple expr = match expr.pexp_desc with
+
   | Pexp_apply ({pexp_desc = Pexp_ident {txt = Lident "when_cond"; _}; _}, arglabel_expr_list) ->
     begin
     match arglabel_expr_list with
@@ -98,6 +99,58 @@ let get_when_simple expr = match expr.pexp_desc with
       | (_, {pexp_loc; _})::_ -> Location.raise_errorf ~loc:pexp_loc "`when_cond` is only supposed to take 2 args: the pattern and the condition."
     end
   | _ -> expr, None
+
+let get_when_simple2 expr = match expr.pexp_desc with
+  | Pexp_apply (exp, arglabel_expr_list) ->
+    begin
+    match arglabel_expr_list with
+      | [] -> Location.raise_errorf "Bug in handling of `When`: no args detected" (* Should never happen*)
+      | [(Nolabel, {pexp_desc = Pexp_construct ({txt = Lident "When"; _ }, optional_condition); pexp_loc = expr_loc})] -> 
+        begin
+          exp, optional_condition
+        end
+      | [(Nolabel, {pexp_desc = Pexp_construct ({txt = Lident "When"; _ }, optional_condition); pexp_loc = expr_loc}); (Nolabel, exp2)] -> 
+        begin
+          exp, (
+            match optional_condition with 
+            | Some e' -> Some e'
+            | None -> Some exp2
+          )
+        end
+      | _ -> expr, None
+    end
+  | _ -> expr, None
+ 
+
+let rec get_when_simple3 expr =
+  let pexp_desc, cond = match expr.pexp_desc with
+    | Pexp_apply ({pexp_desc = Pexp_ident {txt = Lident "||"; loc}; _} as exp2, [(Nolabel, e1); (Nolabel, e2)]) ->
+      let e2, c1 = get_when_simple3 e2 in
+      Pexp_apply ({exp2 with pexp_desc = Pexp_ident {txt = Lident "||"; loc}}, [(Nolabel, e1); (Nolabel, e2)]), c1
+    | Pexp_apply ({pexp_desc = Pexp_ident {txt = Lident "&&"; loc}; _} as exp2, [(Nolabel, e1); (Nolabel, e2)]) ->
+      let e2, c1 = get_when_simple3 e2 in
+      Pexp_apply ({exp2 with pexp_desc = Pexp_ident {txt = Lident "&&"; loc}}, [(Nolabel, e1); (Nolabel, e2)]), c1
+    | Pexp_apply ({pexp_desc = Pexp_ident {txt = Lident "="; loc}; _} as exp2, [(Nolabel, e1); (Nolabel, e2)]) ->
+      let e2, c1 = get_when_simple3 e2 in
+      Pexp_apply ({exp2 with pexp_desc = Pexp_ident {txt = Lident "="; loc}}, [(Nolabel, e1); (Nolabel, e2)]), c1
+    | Pexp_apply (e1, l) ->
+      let rec aux = function
+        | (Nolabel, {pexp_desc = Pexp_construct ({txt = Lident "When"; _}, None); _})::tl ->
+          begin match tl with
+            | [(Nolabel, x)] -> [], Some x
+            | _ -> Location.raise_errorf ~loc:expr.pexp_loc "Invalid syntax"
+          end
+        | e1::tl -> let (tl2, cond) = aux tl in (e1 :: tl2, cond)
+        | _ -> Location.raise_errorf ~loc:expr.pexp_loc "Invalid syntax"
+      in
+      let l2, cond = aux l in
+      if l2 = []
+      then e1.pexp_desc, cond
+      else Pexp_apply(e1, l2), cond
+    | pexp -> pexp, None
+
+  in {expr with pexp_desc}, cond
+  
 
   (* This never gets called*)
   (* TODO remove *)
@@ -328,12 +381,10 @@ and translate_expr expr =
         | Pexp_ident {txt = Lident "await"; _} ->
           begin match arglabel_expr_list with 
             | [(Nolabel, e1)] -> Pexpr_await (Nonimmediate, event_of_expr e1)
+            | [(Nolabel, 
+                {pexp_desc = Pexp_construct ({txt = Lident "Immediate"; _ }, _); pexp_loc = _}
+               ); (Nolabel, e2)] -> Pexpr_await (Immediate, event_of_expr e2)
             | _ -> Location.raise_errorf ~loc "`await` requires exactly a single, unlabelled, argument"
-          end
-        | Pexp_ident {txt = Lident "await_immediate"; _} ->
-          begin match arglabel_expr_list with 
-            | [(Nolabel, e1)] -> Pexpr_await (Immediate, event_of_expr e1)
-            | _ -> Location.raise_errorf ~loc "`await_immediate` requires exactly a single, unlabelled, argument"
           end
         | _ -> Pexpr_apply (translate_expr expr, List.map (fun (al, expr) -> let () = if al <> Nolabel then Location.raise_errorf ~loc "Labelled arguments are not supported in rml" in translate_expr expr) arglabel_expr_list)
         (* TODO implemented Pexpr_merge = expr |> expr *)
@@ -386,11 +437,16 @@ and translate_expr expr =
                 begin 
                   if attributes = [] then
                     match vb.pvb_pat.ppat_desc with
+                    | Ppat_construct ({txt = Lident "Immediate"; _ }, Some {ppat_desc = Ppat_construct ({txt = Lident "One"; _}, None); _}) ->
+                      let event, when_expr = get_when_simple3 vb.pvb_expr in
+                      Pexpr_await_val (Immediate, One, event_of_expr event, translate_expropt when_expr, translate_expr in_expr);
+                    | Ppat_construct ({txt = Lident "Immediate"; _ }, Some {ppat_desc = Ppat_construct ({txt = Lident "All"; _}, None); _}) ->
+                      Location.raise_errorf ~loc:vb.pvb_pat.ppat_loc "Invalid syntax"
                     | Ppat_construct ({txt = Lident "One"; _ }, None) ->
-                      let event, when_expr = get_when_simple vb.pvb_expr in
+                      let event, when_expr = get_when_simple3 vb.pvb_expr in
                       Pexpr_await_val (Nonimmediate, One, event_of_expr event, translate_expropt when_expr, translate_expr in_expr);
                     | Ppat_construct ({txt = Lident "All"; _ }, None) ->
-                      let event, when_expr = get_when_simple vb.pvb_expr in
+                      let event, when_expr = get_when_simple3 vb.pvb_expr in
                       Pexpr_await_val (Nonimmediate, All, event_of_expr event, translate_expropt when_expr, translate_expr in_expr);
                     | _ -> Location.raise_errorf ~loc:vb.pvb_pat.ppat_loc "Invalid syntax, only `One` and `All` are allowed"
                   else
@@ -401,22 +457,6 @@ and translate_expr expr =
               then Pexpr_await (Nonimmediate, event_of_expr expr)
               else Location.raise_errorf ~loc "Unsupported attributes"
             | _ -> Location.raise_errorf ~loc "Invalid syntax" 
-          end
-        | "await_immediate", PStr [stri] -> begin
-          match stri.pstr_desc with
-            | Pstr_eval ({pexp_desc = Pexp_let (Nonrecursive, [vb], in_expr); _}, attributes) ->
-                if attributes = [] then
-                  match vb.pvb_pat.ppat_desc with
-                  | Ppat_construct ({txt = Lident "One"; _ }, None) ->
-                    let event, when_expr = get_when_simple vb.pvb_expr in
-                    Pexpr_await_val (Immediate, One, event_of_expr event, translate_expropt when_expr, translate_expr in_expr);
-                  | _ -> Location.raise_errorf ~loc "Invalid syntax, only `One` is allowed in `await_immediate`"
-                else Location.raise_errorf ~loc "Invalid syntax, unsupported attributes"
-            | Pstr_eval (expr, attributes) ->
-              if attributes = []
-              then Pexpr_await (Immediate, event_of_expr expr)
-              else Location.raise_errorf ~loc "Unsupported attributes"
-            | _ -> Location.raise_errorf ~loc "Invalid syntax"
           end
         | "signal", PStr [stri] ->
             begin match stri.pstr_desc with
@@ -444,6 +484,28 @@ and translate_expr expr =
                 Location.raise_errorf ~loc "Invalid syntax, unsupported attributes" 
             | _ -> Location.raise_errorf ~loc "Invalid syntax"
           end
+        | "control", PStr [stri] ->
+          begin match stri.pstr_desc with
+            | Pstr_eval ({pexp_desc = Pexp_try (expr, [case]); _}, attributes) ->
+              if attributes = []
+              then Pexpr_control (event_of_patt_ext_event case.pc_lhs, translate_expropt case.pc_guard, translate_expr expr)
+              else
+                Location.raise_errorf ~loc "Invalid syntax, unsupported attributes" 
+            | _ -> Location.raise_errorf ~loc "Invalid syntax"
+          end
+        | "when", PStr [stri] ->
+          begin match stri.pstr_desc with
+            | Pstr_eval ({pexp_desc = Pexp_try (expr, [case]); _}, attributes) ->
+              begin
+                match case.pc_guard with
+                | Some e -> Location.raise_errorf ~loc:e.pexp_loc "No branch guard allowed in do..when.. construction" 
+                | None -> if attributes = []
+                  then Pexpr_when (event_of_patt_ext_event case.pc_lhs, translate_expr expr)
+                  else
+                    Location.raise_errorf ~loc "Invalid syntax, unsupported attributes" 
+              end
+            | _ -> Location.raise_errorf ~loc "Invalid syntax"
+          end
         | "ocaml", PStr [stri] ->
           begin match stri.pstr_desc with
             | Pstr_eval (expr, []) -> Pexpr_ocaml expr
@@ -464,7 +526,8 @@ and translate_expr expr =
               end
             | _ -> Location.raise_errorf ~loc "Invalid syntax"
           end
-        | "until", _ | "signal", _ | "await", _ | "para", _ | "par", _  | "ocaml", _ | "present", _ -> Location.raise_errorf ~loc "Invalid extension payload" 
+        | "until", _ | "signal", _ | "await", _ | "para", _ | "par", _  | "ocaml", _ | "present", _ 
+        | "when", _ | "control", _ -> Location.raise_errorf ~loc "Invalid extension payload" 
         | _, _ -> Location.raise_errorf ~loc:name.loc "extension %s is not supported" name.txt
       end
   in {pexpr_desc; pexpr_loc = expr.pexp_loc}
