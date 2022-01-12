@@ -219,6 +219,21 @@ let get_imm_one_when expr = match expr.pexp_desc with
     let await_kind, event, when_expr = get_one_when ~loc:expr.pexp_loc expr in
   (Nonimmediate, await_kind, event, when_expr)
 
+let rec extract_signals_from_let = function
+    | [] -> []
+    | vb::vbl ->
+      let lets = extract_signals_from_let vbl in
+      begin
+        match vb.pvb_pat.ppat_desc, vb.pvb_expr.pexp_desc with 
+        | Ppat_var name, Pexp_construct ({txt = Lident "Signal"; _}, Some signal_expr) ->
+          { vb with pvb_expr = 
+            {signal_expr with pexp_desc = Pexp_let (Nonrecursive, [vb], 
+              {signal_expr with pexp_desc = Pexp_ident ({txt = Lident name.txt; loc = vb.pvb_pat.ppat_loc})}
+              )}  ; 
+            pvb_pat = { vb.pvb_pat with ppat_desc = Ppat_var name } } :: lets
+        | _, _ -> vb :: lets
+      end
+
 let rec translate_patt patt =
   let ppatt_desc = match patt.ppat_desc with
     | Ppat_any -> Ppatt_any
@@ -334,15 +349,11 @@ and translate_expr expr =
     | Pexp_constant c ->
       expr_immediate_of_expr_constant ~loc expr c
       
-    | Pexp_let (rf, vb :: vbl, expr) -> 
+    | Pexp_let (rf, [vb], expr) -> 
       begin
         match rf, vb.pvb_expr.pexp_desc with 
         | Nonrecursive, Pexp_construct ({txt = Lident "Signal"; _}, Some signal_expr) ->
-          let descent = translate_expr begin 
-            match vbl with 
-            | [] -> expr
-            | _ -> {expr with pexp_desc = Pexp_let (Nonrecursive, vbl, expr)}
-          end in
+          let descent = translate_expr expr in
           begin match signal_expr.pexp_desc with
           | Pexp_construct ({txt = Lident "()"; _}, None) -> 
             Pexpr_signal (sident_typeoptL_of_patt vb.pvb_pat, None, descent)
@@ -356,9 +367,9 @@ and translate_expr expr =
             Pexpr_signal (sident_typeoptL_of_patt vb.pvb_pat, None, descent)
           | _ -> Location.raise_errorf ~loc "Invalid construction for `signal`: expecting a record with (default, gather) or (memory, gather) fields or an unit expression."
           end
-        | _, _ -> Pexpr_let (rf, List.map pat_expr_of_value_binding (vb :: vbl), translate_expr expr)
+        | _, _ -> Pexpr_let (rf, List.map pat_expr_of_value_binding [vb], translate_expr expr)
       end
-    | Pexp_let (rf, vb :: vbl, expr) -> Pexpr_let (rf, List.map pat_expr_of_value_binding vbl, translate_expr expr)
+    | Pexp_let (rf, vbl, expr) -> Pexpr_let (rf, List.map pat_expr_of_value_binding (extract_signals_from_let vbl), translate_expr expr)
     | Pexp_function cases -> Pexpr_function (List.map pat_expop_exp_of_case cases)
     | Pexp_fun (arg_l, exprop, patt, expr) ->
         let () = if arg_l <> Nolabel || exprop <> None
