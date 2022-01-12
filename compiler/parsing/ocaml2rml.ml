@@ -422,6 +422,8 @@ and translate_expr expr =
         | ({txt = Lident "false"; _}, None) -> Pexpr_constant (Const_bool false)
         | ({txt = Lident "All"; loc}, _) | ({txt = Lident "One"; loc}, _) | ({txt = Lident "Immediate"; loc}, _)
           -> Location.raise_errorf ~loc "Reserved keyword in rml"
+        | ({txt = Lident "Signal"; _}, _)
+          -> failwith "TODO"
         | _ -> Pexpr_construct (ident_of_lident ident, translate_expropt expop)
       end
     | Pexp_record (name_expr_list, expop) ->
@@ -548,14 +550,20 @@ let sident_strlist_tdecl_of_tdecl ptype =
     | Ptype_abstract -> Location.raise_errorf ~loc "Unimplemented in rml due to lack of exemples."
     | Ptype_variant const_declL ->
         RmlPtype_variant (List.map (fun cstr_decl ->
-          let () = assert (cstr_decl.pcd_attributes = []) in
-          let () = assert (cstr_decl.pcd_res = None) in
-          (simple_ident_of_string_loc cstr_decl.pcd_name,
-          match cstr_decl.pcd_args with
-          | Pcstr_tuple [] -> None
-          | Pcstr_tuple l -> Some ({pte_desc = RmlPtype_tuple (List.map translate_core_type l); pte_loc = cstr_decl.pcd_loc})
-          | Pcstr_record _ -> Location.raise_errorf ~loc "Records are not supported."
-          )) const_declL)
+          if cstr_decl.pcd_attributes <> [] || (cstr_decl.pcd_res <> None) || cstr_decl.pcd_vars <> []
+          then
+            Location.raise_errorf ~loc:cstr_decl.pcd_loc "Unsupported syntax in rml"
+          else let name = cstr_decl.pcd_name.txt in
+            if name = "All" || name = "One" || name = "Process" || name = "Signal"
+            then
+              Location.raise_errorf ~loc:cstr_decl.pcd_name.loc "Reserved name in rml"
+            else
+              (simple_ident_of_string_loc cstr_decl.pcd_name,
+              match cstr_decl.pcd_args with
+              | Pcstr_tuple [] -> None
+              | Pcstr_tuple l -> Some ({pte_desc = RmlPtype_tuple (List.map translate_core_type l); pte_loc = cstr_decl.pcd_loc})
+              | Pcstr_record _ -> Location.raise_errorf ~loc "Records are not supported."
+              )) const_declL)
     | Ptype_record label_declL ->
         RmlPtype_record (List.map
                           (fun label_decl ->
