@@ -1,5 +1,5 @@
 [%%rml.Pre
-  let%signal test0_s = {default = 69; gather = (fun x _ -> x)};;
+  let test0_s = Signal {default = 69; gather = (fun x _ -> x)};;
   let test0_s_default = default test0_s;;
   let v_0_0 = pre_status test0_s;;
   let v_0_1 = pre_value test0_s;;
@@ -8,7 +8,7 @@
   let v_0_2 = pre_status test0_s;;
   let v_0_3 = pre_value test0_s;;
 
-  let%signal test1_s = {default = []; gather = fun x y -> x :: y};;
+  let test1_s = Signal {default = []; gather = fun x y -> x :: y};;
   let test1_s_default = default test1_s;;
   let v_1_0 = pre_status test1_s;;
   let v_1_1 = pre_value test1_s;;
@@ -17,7 +17,7 @@
   let v_1_2 = pre_status test1_s;;
   let v_1_3 = pre_value test1_s;;
 
-  let%signal test2_s = {default = [69]; gather = fun x y -> x :: y};;
+  let test2_s = Signal {default = [69]; gather = fun x y -> x :: y};;
   let test2_s_default = default test2_s;;
   let v_2_0 = pre_status test2_s;;
   let v_2_1 = pre_value test2_s;;

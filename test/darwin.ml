@@ -107,7 +107,7 @@ let random_speed () =
 
 
 let random_number_state n wall =
-  let%signal kill_s = { default = None; gather = (fun x y -> Some x)} in
+  let kill_s = Signal { default = None; gather = (fun x y -> Some x)} in
   {
     id = n;
     pos = random_pos wall;
@@ -120,7 +120,7 @@ let random_number_state n wall =
 
 (* Question 4 *)
 
-let%signal list_signal = {default = []; gather = (fun x y -> x :: y)};;
+let list_signal = Signal {default = []; gather = (fun x y -> x :: y)};;
 
 
 (* Question 6 *)
@@ -212,7 +212,7 @@ let process main : unit process =
     top = 512.;
     right = 512.;
   } in
-  let%signal click = {default = {x = 0.; y = 0.; }; gather = (fun x y -> x)} in
+  let click = Signal {default = {x = 0.; y = 0.; }; gather = (fun x y -> x)} in
   (for%par i = 2 to 100 do
       let state = random_number_state i wall in
       run (number state wall list_signal);

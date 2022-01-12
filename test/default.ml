@@ -1,15 +1,15 @@
 [%%rml.Default
-  let%signal test0_s = {default = 69; gather = (fun x _ -> x)};;
+  let test0_s = Signal {default = 69; gather = (fun x _ -> x)};;
   let v_0_0 = default test0_s;;
   emit test0_s 42;;
   let v_0_1 = default test0_s;;
 
-  let%signal test1_s = {default = []; gather = fun x y -> x :: y};;
+  let test1_s = Signal {default = []; gather = fun x y -> x :: y};;
   let v_1_0 = default test1_s;;
   emit test1_s 42;;
   let v_1_1 = default test1_s;;
 
-  let%signal test2_s = {default = [69]; gather = fun x y -> x :: y};;
+  let test2_s = Signal {default = [69]; gather = fun x y -> x :: y};;
   let v_2_0 = default test2_s;;
   emit test2_s 42;;
   let v_2_1 = default test2_s;;
