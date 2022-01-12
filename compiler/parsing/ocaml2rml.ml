@@ -349,7 +349,9 @@ and translate_expr expr =
         | Lident "pause" -> Pexpr_pause
         | Lident "halt" -> Pexpr_halt
         | Lident "nothing" -> Pexpr_nothing
-        | Lident "emit" | Lident "process" -> Location.raise_errorf ~loc:lident.loc "Reserved keyword"
+        | Lident "emit" | Lident "process" | Lident "run" | Lident "default" | Lident "last"
+          | Lident "pre_value" | Lident "pre_status" | Lident "await" ->
+            Location.raise_errorf ~loc:lident.loc "Reserved keyword"
         | _ -> Pexpr_ident (ident_of_lident lident)
       end
     | Pexp_constant c ->
@@ -418,6 +420,8 @@ and translate_expr expr =
         | ({txt = Lident "()"; _}, None) -> Pexpr_constant Const_unit
         | ({txt = Lident "true"; _}, None) -> Pexpr_constant (Const_bool true)
         | ({txt = Lident "false"; _}, None) -> Pexpr_constant (Const_bool false)
+        | ({txt = Lident "All"; loc}, _) | ({txt = Lident "One"; loc}, _) | ({txt = Lident "Immediate"; loc}, _)
+          -> Location.raise_errorf ~loc "Reserved keyword in rml"
         | _ -> Pexpr_construct (ident_of_lident ident, translate_expropt expop)
       end
     | Pexp_record (name_expr_list, expop) ->
@@ -460,15 +464,13 @@ and translate_expr expr =
                     | Ppat_construct ({txt = Lident "Immediate"; _ }, Some {ppat_desc = Ppat_construct ({txt = Lident "One"; _}, None); _}) ->
                       let event, when_expr = get_when_simple3 vb.pvb_expr in
                       Pexpr_await_val (Immediate, One, event_of_expr event, translate_expropt when_expr, translate_expr in_expr);
-                    | Ppat_construct ({txt = Lident "Immediate"; _ }, Some {ppat_desc = Ppat_construct ({txt = Lident "All"; _}, None); _}) ->
-                      Location.raise_errorf ~loc:vb.pvb_pat.ppat_loc "Invalid syntax"
                     | Ppat_construct ({txt = Lident "One"; _ }, None) ->
                       let event, when_expr = get_when_simple3 vb.pvb_expr in
                       Pexpr_await_val (Nonimmediate, One, event_of_expr event, translate_expropt when_expr, translate_expr in_expr);
                     | Ppat_construct ({txt = Lident "All"; _ }, None) ->
                       let event, when_expr = get_when_simple3 vb.pvb_expr in
                       Pexpr_await_val (Nonimmediate, All, event_of_expr event, translate_expropt when_expr, translate_expr in_expr);
-                    | _ -> Location.raise_errorf ~loc:vb.pvb_pat.ppat_loc "Invalid syntax, only `One` and `All` are allowed"
+                    | _ -> Location.raise_errorf ~loc:vb.pvb_pat.ppat_loc "Invalid syntax, only `One`, `All` and `Immediate One` are allowed"
                   else
                     Location.raise_errorf ~loc "Unsupported attributes"
                 end
