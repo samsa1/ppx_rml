@@ -175,7 +175,7 @@ module Class : S =
 
 
         (* maj de l'etat de l'objet si necessaire et revoie "true"
-	    s'il doit etre mis a jour à l'instant suivant *)
+	    s'il doit etre mis a jour a l'instant suivant *)
 	method update =
 	  if to_update then
 	    begin
@@ -194,23 +194,9 @@ module Class : S =
       end
 
     class ['a, 'b] memory_event((default: 'b), (combine: ('a -> 'b -> 'b))) =
-      object (self)
+      object (_)
         inherit ['a, 'b] valued_event (default, combine)
 
-        method update =
-          if to_update then
-            begin
-              if status then
-                begin
-                  last <- value
-                end;
-              pre_status <- status;
-              status <- false;
-              to_update <- pre_status;
-              pre_status
-            end
-          else
-            false
       end
 
     type ('a,'b) t =

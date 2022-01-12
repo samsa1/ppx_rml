@@ -97,7 +97,7 @@ module Rml_interpreter : Lco_interpreter.S =
 	(fun () -> is_true1() && is_true2()),
         (fun () -> get1(), get2())
 
-    let cfg_or c1 c2 =
+    let _cfg_or c1 c2 =
       fun () ->
 	let is_true1, get1 = c1 () in
 	let is_true2, get2 = c2 () in
@@ -503,7 +503,7 @@ module Rml_interpreter : Lco_interpreter.S =
 (**************************************)
 (* def_and_dyn                        *)
 (**************************************)
-    let rml_def_and_dyn =
+    let _rml_def_and_dyn =
       let gamma par_status alpha =
 	match par_status, alpha with
 	| SUSP, _ -> SUSP

@@ -1,7 +1,7 @@
 
 [%%rml.Control
-let%signal s = {default = 0; gather = fun x y -> x + y}
-let%signal s2 = {default = 1; gather = fun x y -> x * y}
+let s = Signal {default = 0; gather = fun x y -> x + y}
+let s2 = Signal {default = 1; gather = fun x y -> x * y}
 
 let global_value = ref 0;;
 

@@ -3,14 +3,21 @@
 
   let ratio = 1000000
 
-  let%signal s = {default = 0; gather = fun x y -> x + y}
-  let%signal s2 = {default = 1; gather = fun x y -> x * y}
-  let%signal s3 = {default = (0, 0); gather = fun x _ -> x}
-  let%signal s4 = {default = []; gather = fun x y -> x :: y}
-  let%signal sp0 = {default = 0; gather = fun x _ -> x}
-  let%signal sp1 = {default = 0; gather = fun x _ -> x}
-  let%signal sp2 = {default = 0; gather = fun x _ -> x}
-  let%signal sp3 = {default = 0; gather = fun x _ -> x}
+  let s = Signal {default = 0; gather = fun x y -> x + y}
+  let s2 = Signal {default = 1; gather = fun x y -> x * y}
+  let s3 = Signal {default = (0, 0); gather = fun x _ -> x}
+  let s4 = Signal {default = []; gather = fun x y -> x :: y}
+  let sp0 = Signal {default = 0; gather = fun x _ -> x}
+  let sp1 = Signal {default = 0; gather = fun x _ -> x}
+  let sp2 = Signal {default = 0; gather = fun x _ -> x}
+  let sp3 = Signal {default = 0; gather = fun x _ -> x}
+
+  let process a () =
+    let sp4 = Signal {default = 0; gather = fun x _ -> x}
+      and _useless_0 = 42
+      and sp5 = Signal {default = 0; gather = fun x _ -> x}
+      and _useless_1 = 69
+      in ((emit sp4 _useless_0) || (emit sp5 _useless_1))
 
   let process spam n = 
     for%par i = 1 to n do
@@ -28,7 +35,7 @@
 
 
   let process compare n =
-    let p = ref 0 in run (spam n) || run (catch p); !p
+    let p = ref 0 in run (spam n) || run (catch p) || (run (a ())); !p
   
   let process present_1 =
     let c = (if%present sp0 then 42 else 69) in
