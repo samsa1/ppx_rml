@@ -272,7 +272,7 @@ module Rml_interpreter : Lco_interpreter.S =
         (fun () -> get1(), get2()),
 	rev_app evt_list1 evt_list2
 
-    let cfg_or c1 c2 =
+    let _cfg_or c1 c2 =
       fun is_long_wait ->
 	let is_true1, get1, evt_list1 = c1 is_long_wait in
 	let is_true2, get2, evt_list2 = c2 is_long_wait in
@@ -993,7 +993,7 @@ let rml_loop p =
 (* def_and_dyn                        *)
 (**************************************)
 
-    let rml_def_and_dyn =
+    let _rml_def_and_dyn =
       let join_n cpt value_array p3 i =
 	fun f_k ctrl jp ->
 	  fun x ->
@@ -1600,7 +1600,7 @@ let rml_loop p =
 	    sched()
 	in f_par_n
 
-    let rml_seq_n =
+    let _rml_seq_n =
       let rec fold p_list k ctrl jp =
 	match p_list with
 	| [] -> k

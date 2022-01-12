@@ -73,3 +73,5 @@ compiler/parsing/parser.mly
 compiler/parsing/syntaxerr.ml
 
 compiler/reac/annot.ml
+
+warnings
