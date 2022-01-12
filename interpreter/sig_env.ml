@@ -175,7 +175,7 @@ module Class : S =
 
 
         (* maj de l'etat de l'objet si necessaire et revoie "true"
-	    s'il doit etre mis a jour � l'instant suivant *)
+	    s'il doit etre mis a jour a l'instant suivant *)
 	method update =
 	  if to_update then
 	    begin
