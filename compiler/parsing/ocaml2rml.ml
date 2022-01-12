@@ -219,21 +219,6 @@ let get_imm_one_when expr = match expr.pexp_desc with
     let await_kind, event, when_expr = get_one_when ~loc:expr.pexp_loc expr in
   (Nonimmediate, await_kind, event, when_expr)
 
-let rec extract_signals_from_let = function
-    | [] -> []
-    | vb::vbl ->
-      let lets = extract_signals_from_let vbl in
-      begin
-        match vb.pvb_pat.ppat_desc, vb.pvb_expr.pexp_desc with
-        | Ppat_var name, Pexp_construct ({txt = Lident "Signal"; _}, Some signal_expr) ->
-          { vb with pvb_expr =
-            {signal_expr with pexp_desc = Pexp_let (Nonrecursive, [vb],
-              {signal_expr with pexp_desc = Pexp_ident ({txt = Lident name.txt; loc = vb.pvb_pat.ppat_loc})}
-              )}  ;
-            pvb_pat = { vb.pvb_pat with ppat_desc = Ppat_var name } } :: lets
-        | _, _ -> vb :: lets
-      end
-
 let rec translate_patt patt =
   let ppatt_desc = match patt.ppat_desc with
     | Ppat_any -> Ppatt_any
@@ -297,6 +282,34 @@ and pat_expr_of_value_binding vb =
     match vb.pvb_pat.ppat_desc, vb.pvb_expr.pexp_desc with
       | Ppat_var {txt = "process"; _}, Pexp_fun (Nolabel, None, patt, expr) -> (translate_patt patt, add_process expr)
       | Ppat_var {txt = "process"; _}, _ -> Location.raise_errorf ~loc:vb.pvb_expr.pexp_loc "Invalid syntax, expected process name"
+      | _, Pexp_construct({txt = Lident "Signal"; _}, None) ->
+         (translate_patt vb.pvb_pat,
+          {
+            pexpr_desc = Pexpr_signal (
+              [{psimple_id = "rml_local_signal"; psimple_loc = Location.none}, None],
+              None,
+             {pexpr_desc = Pexpr_ident {pident_id = Pident "rml_local_signal"; pident_loc = Location.none};
+              pexpr_loc = Location.none});
+            pexpr_loc = vb.pvb_expr.pexp_loc
+          })
+      | _, Pexp_construct({txt = Lident "Signal"; _}, Some param) ->
+        let signal_param = match param.pexp_desc with
+          | Pexp_record ([({txt = Lident "default"; _}, expr_default); ({txt = Lident "gather"; _}, expr_gather)], None)
+          | Pexp_record ([({txt = Lident "gather"; _}, expr_gather); ({txt = Lident "default"; _}, expr_default)], None) ->
+            (Default, translate_expr expr_default, translate_expr expr_gather)
+          | Pexp_record ([({txt = Lident "memory"; _}, expr_memory); ({txt = Lident "gather"; _}, expr_gather)], None)
+          | Pexp_record ([({txt = Lident "gather"; _}, expr_gather); ({txt = Lident "memory"; _}, expr_memory)], None) ->
+            (Memory, translate_expr expr_memory, translate_expr expr_gather)
+          | _ -> Location.raise_errorf ~loc:param.pexp_loc "Invalid signal parameters"
+        in (translate_patt vb.pvb_pat,
+          {
+            pexpr_desc = Pexpr_signal (
+              [{psimple_id = "rml_local_signal"; psimple_loc = Location.none}, None],
+              Some signal_param,
+            {pexpr_desc = Pexpr_ident {pident_id = Pident "rml_local_signal"; pident_loc = Location.none};
+              pexpr_loc = Location.none});
+            pexpr_loc = vb.pvb_expr.pexp_loc
+          })
       | _, _ -> (translate_patt vb.pvb_pat, translate_expr vb.pvb_expr)
 and pattern_of_expr expr =
   let loc = expr.pexp_loc in
@@ -341,28 +354,7 @@ and translate_expr expr =
       end
     | Pexp_constant c ->
       expr_immediate_of_expr_constant expr c
-
-    | Pexp_let (rf, [vb], expr) ->
-      begin
-        match rf, vb.pvb_expr.pexp_desc with
-        | Nonrecursive, Pexp_construct ({txt = Lident "Signal"; _}, Some signal_expr) ->
-          let descent = translate_expr expr in
-          begin match signal_expr.pexp_desc with
-          | Pexp_construct ({txt = Lident "()"; _}, None) ->
-            Pexpr_signal (sident_typeoptL_of_patt vb.pvb_pat, None, descent)
-          | Pexp_record ([({txt = Lident "default"; _}, expr_default); ({txt = Lident "gather"; _}, expr_gather)], None)
-          | Pexp_record ([({txt = Lident "gather"; _}, expr_gather); ({txt = Lident "default"; _}, expr_default)], None) ->
-            Pexpr_signal (sident_typeoptL_of_patt vb.pvb_pat, Some (Default, translate_expr expr_default, translate_expr expr_gather), descent)
-          | Pexp_record ([({txt = Lident "memory"; _}, expr_memory); ({txt = Lident "gather"; _}, expr_gather)], None)
-          | Pexp_record ([({txt = Lident "gather"; _}, expr_gather); ({txt = Lident "memory"; _}, expr_memory)], None) ->
-              Pexpr_signal (sident_typeoptL_of_patt vb.pvb_pat, Some (Memory, translate_expr expr_memory, translate_expr expr_gather), descent)
-          | Pexp_record _ ->
-            Pexpr_signal (sident_typeoptL_of_patt vb.pvb_pat, None, descent)
-          | _ -> Location.raise_errorf ~loc "Invalid construction for `signal`: expecting a record with (default, gather) or (memory, gather) fields or an unit expression."
-          end
-        | _, _ -> Pexpr_let (rf, List.map pat_expr_of_value_binding [vb], translate_expr expr)
-      end
-    | Pexp_let (rf, vbl, expr) -> Pexpr_let (rf, List.map pat_expr_of_value_binding (extract_signals_from_let vbl), translate_expr expr)
+    | Pexp_let (rf, vbl, expr) -> Pexpr_let (rf, List.map pat_expr_of_value_binding vbl, translate_expr expr)
     | Pexp_function cases -> Pexpr_function (List.map pat_expop_exp_of_case cases)
     | Pexp_fun (arg_l, exprop, patt, expr) ->
         let () = if arg_l <> Nolabel || exprop <> None
@@ -587,25 +579,6 @@ let impl_item_of_str_item stri =
       let () = if attributes <> []
         then Location.raise_errorf ~loc "Attributes are not implemented for structure elements"
       in Pimpl_expr (translate_expr expr)
-    | Pstr_value (rf, [vb]) ->
-      begin
-        match rf, vb.pvb_expr.pexp_desc with
-        | Nonrecursive, Pexp_construct ({txt = Lident "Signal"; _}, Some signal_expr) ->
-          begin match signal_expr.pexp_desc with
-          | Pexp_construct ({txt = Lident "()"; _}, None) ->
-            Pimpl_signal (sident_typeoptL_of_patt vb.pvb_pat, None)
-          | Pexp_record ([({txt = Lident "default"; _}, expr_default); ({txt = Lident "gather"; _}, expr_gather)], None)
-          | Pexp_record ([({txt = Lident "gather"; _}, expr_gather); ({txt = Lident "default"; _}, expr_default)], None) ->
-            Pimpl_signal (sident_typeoptL_of_patt vb.pvb_pat, Some (Default, translate_expr expr_default, translate_expr expr_gather))
-          | Pexp_record ([({txt = Lident "memory"; _}, expr_memory); ({txt = Lident "gather"; _}, expr_gather)], None)
-          | Pexp_record ([({txt = Lident "gather"; _}, expr_gather); ({txt = Lident "memory"; _}, expr_memory)], None) ->
-            Pimpl_signal (sident_typeoptL_of_patt vb.pvb_pat, Some (Memory, translate_expr expr_memory, translate_expr expr_gather))
-          | Pexp_record _ ->
-            Pimpl_signal (sident_typeoptL_of_patt vb.pvb_pat, None)
-          | _ -> Location.raise_errorf ~loc "Invalid construction for `signal`: expecting a record with (default, gather) or (memory, gather) fields or an unit expression."
-          end
-        | _, _ -> Pimpl_let (rf, List.map pat_expr_of_value_binding [vb])
-      end
     | Pstr_value (rf, vbl) -> Pimpl_let (rf, List.map pat_expr_of_value_binding vbl)
 
     | Pstr_type (_, type_declaration_list) ->
