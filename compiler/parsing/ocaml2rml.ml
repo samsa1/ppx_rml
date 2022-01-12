@@ -23,13 +23,13 @@ let immediate_of_constant ~loc = function
       in Const_float (float_of_string s)
   end
 
-let expr_immediate_of_expr_constant ~loc expr = function
+let expr_immediate_of_expr_constant expr = function
   | Pconst_integer (str, char_op) -> 
     if char_op <> None
     then Pexpr_ocaml expr
     else Pexpr_constant (Const_int (int_of_string str))
   | Pconst_char c -> Pexpr_constant (Const_char c)
-  | Pconst_string (s, loc, sop) ->
+  | Pconst_string (s, _, sop) ->
     if sop <> None
     then Pexpr_ocaml expr
     else Pexpr_constant (Const_string s)
@@ -105,11 +105,11 @@ let get_when_simple2 expr = match expr.pexp_desc with
     begin
     match arglabel_expr_list with
       | [] -> Location.raise_errorf "Bug in handling of `When`: no args detected" (* Should never happen*)
-      | [(Nolabel, {pexp_desc = Pexp_construct ({txt = Lident "When"; _ }, optional_condition); pexp_loc = expr_loc})] -> 
+      | [(Nolabel, {pexp_desc = Pexp_construct ({txt = Lident "When"; _ }, optional_condition); pexp_loc = _; pexp_loc_stack = _; pexp_attributes = _ })] -> 
         begin
           exp, optional_condition
         end
-      | [(Nolabel, {pexp_desc = Pexp_construct ({txt = Lident "When"; _ }, optional_condition); pexp_loc = expr_loc}); (Nolabel, exp2)] -> 
+      | [(Nolabel, {pexp_desc = Pexp_construct ({txt = Lident "When"; _ }, optional_condition); pexp_loc = _; pexp_loc_stack = _; pexp_attributes = _}); (Nolabel, exp2)] -> 
         begin
           exp, (
             match optional_condition with 
@@ -262,7 +262,7 @@ let rec expression_of_pattern patt =
   let pexpr_desc = match patt.ppat_desc with
     | Ppat_any -> Location.raise_errorf ~loc:patt.ppat_loc"Invalid pattern: Ppat_any."
     | Ppat_var str -> Pexpr_ident {pident_id= Pident str.txt; pident_loc = patt.ppat_loc}
-    | Ppat_alias (patt, name) -> Location.raise_errorf ~loc:patt.ppat_loc "Invalid pattern: Ppat_alias."
+    | Ppat_alias (patt, _) -> Location.raise_errorf ~loc:patt.ppat_loc "Invalid pattern: Ppat_alias."
     | Ppat_constant c -> Pexpr_constant (immediate_of_constant ~loc:patt.ppat_loc c)
     | Ppat_tuple pattl -> Pexpr_tuple (List.map expression_of_pattern pattl)
     | Ppat_construct (lident, namel_patt_opt) ->
@@ -276,7 +276,7 @@ let rec expression_of_pattern patt =
     | Ppat_record (lident_patt_l, Closed) -> Pexpr_record (List.map (fun (lident, patt) -> (ident_of_lident lident, expression_of_pattern patt)) lident_patt_l)
     | Ppat_record (_lident_patt_l, Open) -> Location.raise_errorf ~loc:patt.ppat_loc "Unsupported opened record in rml"
     | Ppat_array pattl -> Pexpr_array (List.map expression_of_pattern pattl)
-    | Ppat_or (patt1, patt2) -> Location.raise_errorf ~loc:patt.ppat_loc"Invalid pattern: Ppat_or."
+    | Ppat_or (_, _) -> Location.raise_errorf ~loc:patt.ppat_loc"Invalid pattern: Ppat_or."
     | Ppat_constraint (patt, ctype) -> Pexpr_constraint (expression_of_pattern patt, translate_core_type ctype)
     | Ppat_interval _ | Ppat_variant _ | Ppat_type _ | Ppat_lazy _
     | Ppat_unpack _ | Ppat_exception _ | Ppat_extension _ | Ppat_open _ ->
@@ -340,7 +340,7 @@ and translate_expr expr =
         | _ -> Pexpr_ident (ident_of_lident lident)
       end
     | Pexp_constant c ->
-      expr_immediate_of_expr_constant ~loc expr c
+      expr_immediate_of_expr_constant expr c
       
     | Pexp_let (rf, [vb], expr) -> 
       begin
@@ -410,7 +410,7 @@ and translate_expr expr =
           begin match arglabel_expr_list with 
             | [(Nolabel, e1)] -> Pexpr_await (Nonimmediate, event_of_expr e1)
             | [(Nolabel, 
-                {pexp_desc = Pexp_construct ({txt = Lident "Immediate"; _ }, _); pexp_loc = _}
+                {pexp_desc = Pexp_construct ({txt = Lident "Immediate"; _ }, _); pexp_loc = _; pexp_loc_stack = _; pexp_attributes = _ }
                ); (Nolabel, e2)] -> Pexpr_await (Immediate, event_of_expr e2)
             | _ -> Location.raise_errorf ~loc "`await` requires exactly a single, unlabelled, argument"
           end
