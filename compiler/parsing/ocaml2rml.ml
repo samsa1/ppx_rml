@@ -294,17 +294,10 @@ and pat_expr_of_value_binding vb =
       | _ -> Pexpr_process (translate_expr expr)
     in {pexpr_desc; pexpr_loc = expr.pexp_loc}
   in
-    if match vb.pvb_pat.ppat_desc with
-    | Ppat_var v -> v.txt = "process"
-    | _ -> false
-  then
-    let patt, new_expr = match vb.pvb_expr.pexp_desc with
-      | Pexp_fun (Nolabel, None, patt, expr) -> (translate_patt patt, expr)
-      | _ -> Location.raise_errorf ~loc:vb.pvb_expr.pexp_loc "Invalid syntax, expected process name"
-    in (patt, add_process new_expr)
-  else
-  (translate_patt vb.pvb_pat,
-  translate_expr vb.pvb_expr)
+    match vb.pvb_pat.ppat_desc, vb.pvb_expr.pexp_desc with
+      | Ppat_var {txt = "process"; _}, Pexp_fun (Nolabel, None, patt, expr) -> (translate_patt patt, add_process expr)
+      | Ppat_var {txt = "process"; _}, _ -> Location.raise_errorf ~loc:vb.pvb_expr.pexp_loc "Invalid syntax, expected process name"
+      | _, _ -> (translate_patt vb.pvb_pat, translate_expr vb.pvb_expr)
 and pattern_of_expr expr = 
   let loc = expr.pexp_loc in
   let ppatt_desc = match expr.pexp_desc with
