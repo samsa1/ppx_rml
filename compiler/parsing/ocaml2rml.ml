@@ -550,7 +550,7 @@ let sident_strlist_tdecl_of_tdecl ptype =
     | Ptype_abstract -> Location.raise_errorf ~loc "Unimplemented in rml due to lack of exemples."
     | Ptype_variant const_declL ->
         RmlPtype_variant (List.map (fun cstr_decl ->
-          if cstr_decl.pcd_attributes <> [] || (cstr_decl.pcd_res <> None) || cstr_decl.pcd_vars <> []
+          if cstr_decl.pcd_attributes <> [] || (cstr_decl.pcd_res <> None)
           then
             Location.raise_errorf ~loc:cstr_decl.pcd_loc "Unsupported syntax in rml"
           else let name = cstr_decl.pcd_name.txt in
