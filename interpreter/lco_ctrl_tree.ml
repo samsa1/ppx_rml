@@ -45,10 +45,12 @@ module Rml_interpreter : Lco_interpreter.S =
 
     exception RML
 
+		type 'a secureRef = 'a ref * Mutex.t;;
+
     type ('a, 'b) event =
-	('a,'b) Event.t * unit step list ref * unit step list ref
+	('a,'b) Event.t * unit step list secureRef * unit step list secureRef
     and 'a event_cfg =
-        bool -> (unit -> bool) * (unit -> 'a) * unit step list ref list
+        bool -> (unit -> bool) * (unit -> 'a) * unit step list secureRef list
 
     and control_tree =
 	{ kind: control_type;
@@ -56,13 +58,14 @@ module Rml_interpreter : Lco_interpreter.S =
 	  mutable susp: bool;
 	  mutable cond: (unit -> bool);
 	  mutable children: control_tree list;
-	  mutable next: next; }
+	  mutable next: next;
+		mutex: Mutex.t }
     and control_type =
 	Top
       | Kill of unit step
       | Kill_handler of (unit -> unit step)
       | Susp
-      | When of unit step ref
+      | When of unit step secureRef
 
     and 'a step = 'a -> unit
     and next = unit step list
@@ -70,6 +73,7 @@ module Rml_interpreter : Lco_interpreter.S =
     and 'a expr = 'a step -> control_tree -> unit step
     and 'a process = unit -> 'a expr
 
+		let newRef a = (ref a, Mutex.create ())
 
     let rec rev_app x1 x2 =
       match x1 with
@@ -77,17 +81,29 @@ module Rml_interpreter : Lco_interpreter.S =
       | f :: x1' -> rev_app x1' (f::x2)
 
 (* liste des processus a executer dans l'instant *)
-    let current = ref []
+    let current = newRef []
+
+		let to_launch = newRef []
+
+		module T = Domainslib.Task;;
+
+		let pool = T.setup_pool ~num_additional_domains:3 ()
 
 (* liste des listes de processus a revillier a la fin d'instant *)
-    let toWakeUp = ref []
+    let toWakeUp = newRef []
     let wakeUpAll () =
+			Mutex.lock (snd toWakeUp);
       List.iter
 	(fun wp ->
-	  current := rev_app !wp !current;
-	  wp := [])
-	!toWakeUp;
-      toWakeUp := []
+		Mutex.lock (snd wp);
+		Mutex.lock (snd to_launch);
+	  fst to_launch := rev_app !(fst wp) !(fst to_launch);
+		Mutex.unlock (snd to_launch);
+	  fst wp := [];
+		Mutex.unlock (snd wp))
+	!(fst toWakeUp);
+      fst toWakeUp := [];
+			Mutex.unlock (snd toWakeUp)
 
 (* racine de l'arbre de control *)
     let top =
@@ -96,15 +112,18 @@ module Rml_interpreter : Lco_interpreter.S =
 	susp = false;
 	children = [];
 	cond = (fun () -> false);
-	next = []; }
+	next = [];
+	mutex = Mutex.create () }
 
 (* tuer un arbre p *)
     let rec set_kill p =
+			Mutex.lock p.mutex;
       p.alive <- true;
       p.susp <- false;
       p.next <- [];
       List.iter set_kill p.children;
-      p.children <- []
+      p.children <- [];
+			Mutex.unlock p.mutex
 
 
 (* calculer le nouvel etat de l'arbre de control *)
@@ -155,7 +174,7 @@ module Rml_interpreter : Lco_interpreter.S =
 	      then true
 	      else
 		(p.susp <- true;
-		 pere.next <- !f_when :: pere.next;
+		 pere.next <- !(fst f_when) :: pere.next;
 		 p.children <- eval_children p p.children false [];
 		 true)
 	else
@@ -171,7 +190,7 @@ module Rml_interpreter : Lco_interpreter.S =
 	    else eval_children p nodes active acc
 
       and next_to_current node =
-	current := rev_app node.next !current;
+	fst to_launch := rev_app node.next !(fst to_launch);
 	node.next <- []
       and next_to_father pere node =
 	pere.next <- rev_app node.next pere.next;
@@ -185,31 +204,39 @@ module Rml_interpreter : Lco_interpreter.S =
 (* les listes next *)
     let rec next_to_current p =
       if p.alive && not p.susp then
-	(current := rev_app p.next !current;
+	(Mutex.lock p.mutex;
+	 Mutex.lock (snd current);
+	 fst current := rev_app (List.map (T.async pool) p.next) !(fst current);
+	 Mutex.unlock (snd current);
 	 p.next <- [];
+	 Mutex.unlock p.mutex;
 	 List.iter next_to_current p.children)
       else ()
 
 (* debloquer les processus en attent d'un evt *)
     let wakeUp w =
-      current := rev_app !w !current;
-      w := []
+			Mutex.lock (snd w);
+			Mutex.lock (snd to_launch);
+      fst to_launch := rev_app !(fst w) !(fst to_launch);
+			Mutex.unlock (snd to_launch);
+      fst w := [];
+			Mutex.unlock (snd w)
 
 
 (* creation d'evenements *)
     let new_evt_combine default combine =
       (Event.create default combine,
-       ref ([]: unit step list), ref ([]: unit step list))
+       newRef ([]: unit step list), newRef ([]: unit step list))
 
     let new_evt_memory_combine default combine =
       (Event.create_memory default combine,
-       ref ([]: unit step list), ref ([]: unit step list))
+       newRef ([]: unit step list), newRef ([]: unit step list))
 
     let new_evt() =
       new_evt_combine [] (fun x y -> x :: y)
 
     let eoi = ref false
-    let weoi = ref []
+    let weoi = newRef []
 
     let unit_value = ()
     let dummy_step _ = ()
@@ -218,13 +245,34 @@ module Rml_interpreter : Lco_interpreter.S =
 (**************************************************)
 (* sched                                          *)
 (**************************************************)
-    let sched =
+    (* let sched =
       fun () ->
 	match !current with
 	| f :: c ->
 	    current := c;
 	    f unit_value
-	| [] -> ()
+	| [] -> () *)
+
+		let await =
+			fun () ->
+				Mutex.lock (snd current);
+				Mutex.lock (snd to_launch);
+				fst current := List.map (T.async pool) !(fst to_launch);
+				fst to_launch := [];
+				Mutex.unlock (snd to_launch);
+				while !(fst current) <> [] do
+					(* Here current is always locked *)
+					match !(fst current) with
+						| x::tl -> begin
+								(fst current) := tl;
+								Mutex.unlock (snd current);
+								T.await pool x;
+								Mutex.lock (snd current);
+							end
+						| [] -> assert false  
+					(* Here current is always locked *)
+				done;
+				Mutex.unlock (snd current)
 
 (* ------------------------------------------------------------------------ *)
     let rml_pre_status (n, _, _) = Event.pre_status n
@@ -315,8 +363,10 @@ module Rml_interpreter : Lco_interpreter.S =
       fun f_k ctrl ->
 	let f_pause =
 	  fun _ ->
+			Mutex.lock (ctrl.mutex);
 	    ctrl.next <- f_k :: ctrl.next;
-	    sched ()
+			Mutex.unlock (ctrl.mutex);
+	    ()
 	in f_pause
 
 (**************************************)
@@ -333,7 +383,7 @@ module Rml_interpreter : Lco_interpreter.S =
       fun _f_k _ctrl ->
 	let f_halt =
 	  fun _ ->
-	    sched ()
+	    ()
 	in f_halt
 
 (**************************************)
@@ -387,8 +437,9 @@ module Rml_interpreter : Lco_interpreter.S =
 	    then
 	      f_k unit_value
 	    else
-	      (w := f_await_top :: !w;
-	       sched ())
+	      (Mutex.lock (snd w);
+				fst w := f_await_top :: !(fst w);
+				Mutex.unlock (snd w))
 	in f_await_top
       else
 	let rec f_await_not_top =
@@ -399,12 +450,16 @@ module Rml_interpreter : Lco_interpreter.S =
 	    else
 	      if !eoi
 	      then
-		(ctrl.next <- f_await_not_top :: ctrl.next;
-		 sched())
+		(Mutex.lock (ctrl.mutex);
+			ctrl.next <- f_await_not_top :: ctrl.next;
+			Mutex.unlock (ctrl.mutex))
 	      else
-		(w := f_await_not_top :: !w;
-		 toWakeUp := w :: !toWakeUp;
-		 sched())
+		(Mutex.lock (snd w);
+			fst w := f_await_not_top :: !(fst w);
+			Mutex.unlock (snd w);
+			Mutex.lock (snd toWakeUp);
+		 fst toWakeUp := w :: !(fst toWakeUp);
+		 Mutex.unlock (snd toWakeUp))
 	in f_await_not_top
 
     let rml_await_immediate expr_evt =
@@ -424,8 +479,8 @@ module Rml_interpreter : Lco_interpreter.S =
 (**************************************)
 (* await_immediate_conf               *)
 (**************************************)
-    let rml_await_immediate_conf expr_cfg =
-      fun f_k ctrl ->
+    let rml_await_immediate_conf expr_cfg = assert false
+      (* fun f_k ctrl ->
 	if ctrl.kind = Top then
 	  let f_await_top =
 	    fun _ ->
@@ -491,7 +546,7 @@ module Rml_interpreter : Lco_interpreter.S =
 		    toWakeUp := w :: !toWakeUp)
 		  w_list;
 		sched()
-	  in f_await_not_top
+	  in f_await_not_top *)
 
 (**************************************)
 (* get                                *)
@@ -507,11 +562,15 @@ module Rml_interpreter : Lco_interpreter.S =
 	      else Event.default n
 	    in
 	    let f_body = p x f_k ctrl in
-	    ctrl.next <- f_body :: ctrl.next;
-	    sched()
+			begin
+				Mutex.lock (ctrl.mutex);
+		    ctrl.next <- f_body :: ctrl.next;
+				Mutex.unlock (ctrl.mutex);
+			end
 	  else
-	    (weoi := f_get :: !weoi;
-	     sched ())
+			(Mutex.lock (snd weoi);
+	    fst weoi := f_get :: !(fst weoi);
+			Mutex.unlock (snd weoi))
       in f_get
 
     let rml_get expr_evt p =
@@ -534,8 +593,8 @@ module Rml_interpreter : Lco_interpreter.S =
 (**************************************)
 (* await_immediate_one                *)
 (**************************************)
-    let step_await_immediate_one f_k ctrl (n,wa,wp) p =
-      let w = if ctrl.kind = Top then wa else wp in
+    let step_await_immediate_one f_k ctrl (n,wa,wp) p = assert false
+      (* let w = if ctrl.kind = Top then wa else wp in
       let f_await_one =
 	if ctrl.kind = Top then
 	  let rec f_await_one_top =
@@ -565,26 +624,26 @@ module Rml_interpreter : Lco_interpreter.S =
 		   toWakeUp := w :: !toWakeUp;
 		   sched())
 	  in f_await_one_not_top
-      in f_await_one
+      in f_await_one *)
 
-     let rml_await_immediate_one expr_evt p =
-      fun f_k ctrl ->
+     let rml_await_immediate_one expr_evt p = assert false
+      (* fun f_k ctrl ->
       let f_await_one =
 	fun _ ->
 	  let evt = expr_evt() in
 	  step_await_immediate_one f_k ctrl evt p unit_value
-      in f_await_one
+      in f_await_one *)
 
-    let rml_await_immediate_one' evt p =
-      fun f_k ctrl ->
- 	step_await_immediate_one f_k ctrl evt p
+    let rml_await_immediate_one' evt p = assert false
+      (* fun f_k ctrl ->
+ 	step_await_immediate_one f_k ctrl evt p *)
 
 
 (**************************************)
 (* await_all_match                    *)
 (**************************************)
-    let step_await_all_match f_k ctrl (n,wa,wp) matching p =
-      let w = if ctrl.kind = Top then wa else wp in
+    let step_await_all_match f_k ctrl (n,wa,wp) matching p = assert false
+      (* let w = if ctrl.kind = Top then wa else wp in
       let f_await_all_match =
 	if ctrl.kind = Top then
 	  let rec f_await_top =
@@ -630,7 +689,7 @@ module Rml_interpreter : Lco_interpreter.S =
 		 toWakeUp := w :: !toWakeUp;
 		 sched ())
 	  in f_await_not_top
-      in f_await_all_match
+      in f_await_all_match *)
 
 
     let rml_await_all_match expr_evt matching p =
@@ -655,7 +714,7 @@ module Rml_interpreter : Lco_interpreter.S =
       let gen_step_wake_up ref_f =
         let rec step_wake_up w _ =
           match !ref_f with
-          | None -> sched ()
+          | None -> ()
           | Some f -> f w step_wake_up
         in step_wake_up
       in
@@ -671,19 +730,23 @@ module Rml_interpreter : Lco_interpreter.S =
                   (ref_f := None;
 		   let x = v in
 		   let f_body = p x f_k ctrl in
+			 Mutex.lock (ctrl.mutex);
 		   ctrl.next <- f_body :: ctrl.next;
-		   sched())
+			 Mutex.unlock (ctrl.mutex))
 		else
-		  (w := (step_wake_up w) :: !w;
-		   sched ())
+		  (Mutex.lock (snd w);
+				fst w := (step_wake_up w) :: !(fst w);
+				Mutex.unlock (snd w))
 	      else
 		if is_true ()
 		then
-		  (weoi := (step_wake_up w) :: !weoi;
-		   sched ())
+		  (Mutex.lock (snd weoi);
+				fst weoi := (step_wake_up w) :: !(fst weoi);
+				Mutex.unlock (snd weoi))
 		else
-		  (w := (step_wake_up w) :: !w;
-		   sched ())
+		  (Mutex.lock (snd w);
+				fst w := (step_wake_up w) :: !(fst w);
+				Mutex.unlock (snd w))
             in f_await_top
 	  in
           fun () ->
@@ -693,10 +756,14 @@ module Rml_interpreter : Lco_interpreter.S =
             ref_f := Some f_await_top;
             List.iter
               (fun w ->
-                w := (step_wake_up w) :: !w;
-		toWakeUp := w :: !toWakeUp)
+								Mutex.lock (snd w);
+                fst w := (step_wake_up w) :: !(fst w);
+								Mutex.unlock (snd w);
+								Mutex.lock (snd toWakeUp);
+								fst toWakeUp := w :: !(fst toWakeUp);
+								Mutex.unlock (snd toWakeUp))
               w_list;
-            sched ()
+            ();
 	else
 	  let gen_f_await_not_top ref_f =
 	    let f_await_not_top w step_wake_up =
@@ -708,15 +775,20 @@ module Rml_interpreter : Lco_interpreter.S =
                   (ref_f := None;
 		   let x = v in
 		   let f_body = p x f_k ctrl in
+			 Mutex.lock ctrl.mutex;
 		   ctrl.next <- f_body :: ctrl.next;
-		   sched())
+			 Mutex.unlock ctrl.mutex)
 		else
-		    (ctrl.next <- (step_wake_up w) :: ctrl.next;
-		     sched ())
+		    (Mutex.lock ctrl.mutex;
+				ctrl.next <- (step_wake_up w) :: ctrl.next;
+				Mutex.unlock ctrl.mutex)
 	      else
-		(w := (step_wake_up w) :: !w;
-		 toWakeUp := w :: !toWakeUp;
-		 sched ())
+		(Mutex.lock (snd w);
+			fst w := (step_wake_up w) :: !(fst w);
+			Mutex.unlock (snd w);
+			Mutex.lock (snd toWakeUp);
+			fst toWakeUp := w :: !(fst toWakeUp);
+			Mutex.unlock (snd toWakeUp))
             in f_await_not_top
           in
           fun () ->
@@ -726,10 +798,13 @@ module Rml_interpreter : Lco_interpreter.S =
             ref_f := Some f_await_not_top;
             List.iter
               (fun w ->
-                w := (step_wake_up w) :: !w;
-		toWakeUp := w :: !toWakeUp)
+								Mutex.lock (snd w);
+                fst w := (step_wake_up w) :: !(fst w);
+								Mutex.unlock (snd w);
+								Mutex.lock (snd toWakeUp);
+								fst toWakeUp := w :: !(fst toWakeUp);
+								Mutex.unlock (snd toWakeUp))
               w_list;
-            sched ()
       in f_await_all_match
 
     let rml_await_all_match_conf expr_cfg matching p =
@@ -750,23 +825,24 @@ module Rml_interpreter : Lco_interpreter.S =
 	  else
 	    if !eoi
 	    then
-	      (ctrl.next <- f_2 :: ctrl.next;
-	       sched ())
+	      (Mutex.lock ctrl.mutex;
+				ctrl.next <- f_2 :: ctrl.next;
+				Mutex.unlock ctrl.mutex)
 	    else
-	      (wp := f_present :: !wp;
-	       toWakeUp := wp :: !toWakeUp;
-	       sched ())
+	      (Mutex.lock (snd wp);
+				fst wp := f_present :: !(fst wp);
+				Mutex.unlock (snd wp);
+				Mutex.lock (snd toWakeUp);
+	       fst toWakeUp := wp :: !(fst toWakeUp);
+				 Mutex.unlock (snd toWakeUp))
       in f_present
 
     let rml_present expr_evt p_1 p_2 =
       fun f_k ctrl ->
 	let f_1 = p_1 f_k ctrl in
 	let f_2 = p_2 f_k ctrl in
-	let f_present =
-	  fun _ ->
-	    let evt = expr_evt () in
-	    step_present f_k ctrl evt f_1 f_2 unit_value
-	in f_present
+	let evt = expr_evt () in
+	step_present f_k ctrl evt f_1 f_2
 
     let rml_present' evt p_1 p_2 =
       fun f_k ctrl ->
@@ -777,8 +853,8 @@ module Rml_interpreter : Lco_interpreter.S =
 (**************************************)
 (* present_conf                       *)
 (**************************************)
-    let rml_present_conf expr_cfg p_1 p_2 =
-      fun f_k ctrl ->
+    let rml_present_conf expr_cfg p_1 p_2 = assert false
+      (* fun f_k ctrl ->
 	fun _ ->
 	  let f_1 = p_1 f_k ctrl in
 	  let f_2 = p_2 f_k ctrl in
@@ -815,7 +891,7 @@ module Rml_interpreter : Lco_interpreter.S =
 		w := (gen_step w) :: !w;
 		toWakeUp := w :: !toWakeUp)
 	      w_list;
-	    sched()
+	    sched() *)
 
 (**************************************)
 (* seq                                *)
@@ -837,26 +913,29 @@ module Rml_interpreter : Lco_interpreter.S =
       fun f_k _ctrl ->
 	let f_join =
 	  fun _ ->
-	    incr cpt;
-	    if !cpt = 2
+			Mutex.lock (snd cpt);
+	    incr (fst cpt);
+	    if !(fst cpt) = 2
 	    then (
 	      (* cpt := 0; *)
+				Mutex.unlock (snd cpt);
 	      f_k unit_value
 	     )
-	    else
-	      sched ()
+	    else Mutex.unlock (snd cpt);
 	in f_join
 
     let rml_par p_1 p_2 =
       fun f_k ctrl ->
-	let cpt = ref 0 in
+	let cpt = newRef 0 in
 	let j = join cpt f_k ctrl in
 	let f_1 = p_1 (Obj.magic j: 'a step) ctrl in
 	let f_2 = p_2 (Obj.magic j: 'b step) ctrl in
 	let f_par =
 	  fun _ ->
-	    cpt := 0;
-	    current := f_2 :: !current;
+	    fst cpt := 0;
+			Mutex.lock (snd current);
+	    fst current := T.async pool f_2 :: !(fst current);
+			Mutex.unlock (snd current);
 	    f_1 unit_value
 	in f_par
 
@@ -983,7 +1062,7 @@ let rml_loop p =
 (* def_and_dyn                        *)
 (**************************************)
 
-    let _rml_def_and_dyn =
+    (* let rml_def_and_dyn =
       let join_n cpt value_array p3 i =
 	fun f_k ctrl ->
 	  fun x ->
@@ -1010,7 +1089,7 @@ let rml_loop p =
 		current := f :: !current
 	      done;
 	      sched()
-	  in step_init
+	  in step_init *)
 
 (**************************************)
 (* match                              *)
@@ -1048,11 +1127,13 @@ let rml_loop p =
 	susp = false;
 	children = [];
 	cond = (fun () -> false);
-	next = [] }
+	next = [];
+	mutex = Mutex.create () }
 
     let start_ctrl _f_k ctrl f new_ctrl =
       let f_ctrl =
 	fun _ ->
+		Mutex.lock ctrl.mutex;
 	  if new_ctrl.alive
 	  then
 	    (ctrl.children <- new_ctrl :: ctrl.children)
@@ -1060,18 +1141,21 @@ let rml_loop p =
 	    (new_ctrl.alive <- true;
 	     new_ctrl.susp <- false;
 	     new_ctrl.next <- []);
+		Mutex.unlock ctrl.mutex;
 	  f unit_value
       in f_ctrl
 
     let end_ctrl f_k new_ctrl =
       fun x ->
 	set_kill new_ctrl;
+	Mutex.lock new_ctrl.mutex;
 	new_ctrl.alive <- false;
+	Mutex.unlock new_ctrl.mutex;
 	f_k x
 (* ---------------------------------------------------------------- *)
 
-    let rml_until expr_evt p =
-      fun f_k ctrl ->
+    let rml_until expr_evt p = assert false
+      (* fun f_k ctrl ->
 	let new_ctrl = new_ctrl (Kill f_k) in
 	let f = p (end_ctrl f_k new_ctrl) new_ctrl in
 	let f_until =
@@ -1079,21 +1163,21 @@ let rml_loop p =
 	    let (n,_,_) = expr_evt () in
 	    new_ctrl.cond <- (fun () -> Event.status n);
 	    start_ctrl f_k ctrl f new_ctrl unit_value
-	in f_until
+	in f_until *)
 
-    let rml_until' (n,_,_) p =
-      fun f_k ctrl ->
+    let rml_until' (n,_,_) p = assert false
+      (* fun f_k ctrl ->
 	let new_ctrl = new_ctrl (Kill f_k) in
 	let f = p (end_ctrl f_k new_ctrl) new_ctrl in
 	new_ctrl.cond <- (fun () -> Event.status n);
-	start_ctrl f_k ctrl f new_ctrl
+	start_ctrl f_k ctrl f new_ctrl *)
 
 (**************************************)
 (* until_conf                         *)
 (**************************************)
 
-    let rml_until_conf expr_cfg p =
-      fun f_k ctrl ->
+    let rml_until_conf expr_cfg p = assert false
+      (* fun f_k ctrl ->
 	let new_ctrl = new_ctrl (Kill f_k) in
 	let f = p (end_ctrl f_k new_ctrl) new_ctrl in
 	let f_until =
@@ -1101,7 +1185,7 @@ let rml_loop p =
 	    let cond, _, _ = expr_cfg true in
 	    new_ctrl.cond <- cond;
 	    start_ctrl f_k ctrl f new_ctrl unit_value
-	in f_until
+	in f_until *)
 
 
 
@@ -1110,8 +1194,8 @@ let rml_loop p =
 (**************************************)
 
     let rml_until_handler_local
-	(expr_evt: unit -> ('a, 'b) event) matching_opt p p_handler =
-      fun f_k ctrl ->
+	(expr_evt: unit -> ('a, 'b) event) matching_opt p p_handler = assert false
+      (* fun f_k ctrl ->
 	let evt = ref (Obj.magic() : ('a, 'b) event) in
 	let handler =
 	  fun () ->
@@ -1138,10 +1222,10 @@ let rml_loop p =
 		  (fun () -> Event.status n && matching (Event.value n));
 	    end;
 	    start_ctrl f_k ctrl f new_ctrl unit_value
-	in f_until
+	in f_until *)
 
-    let rml_until_handler_local' (n,_,_) matching_opt p p_handler =
-      fun f_k ctrl ->
+    let rml_until_handler_local' (n,_,_) matching_opt p p_handler = assert false
+      (* fun f_k ctrl ->
 	let handler =
 	  fun () ->
 	    let x =
@@ -1161,10 +1245,10 @@ let rml_loop p =
 	    new_ctrl.cond <-
 	      (fun () -> Event.status n && matching (Event.value n));
 	end;
-	start_ctrl f_k ctrl f new_ctrl
+	start_ctrl f_k ctrl f new_ctrl *)
 
-    let rml_until_handler_conf_local expr_cfg matching_opt p p_handler =
-      fun f_k ctrl ->
+    let rml_until_handler_conf_local expr_cfg matching_opt p p_handler = assert false
+      (* fun f_k ctrl ->
         let ref_get = ref (fun () -> raise RML) in
         let handler =
           fun () ->
@@ -1186,7 +1270,7 @@ let rml_loop p =
                   (fun () -> is_true () && matching (get ()));
             end;
             start_ctrl f_k ctrl f new_ctrl unit_value
-        in f_until
+        in f_until *)
 
 
     let rml_until_handler expr_evt p p_handler =
@@ -1220,8 +1304,8 @@ let rml_loop p =
 (**************************************)
 (* control                            *)
 (**************************************)
-    let rml_control expr_evt p =
-      fun f_k ctrl ->
+    let rml_control expr_evt p = assert false
+      (* fun f_k ctrl ->
 	let new_ctrl = new_ctrl Susp in
 	let f = p (end_ctrl f_k new_ctrl) new_ctrl in
 	let f_control =
@@ -1229,20 +1313,20 @@ let rml_loop p =
 	    let (n, _, _) = expr_evt () in
 	    new_ctrl.cond <- (fun () -> Event.status n);
 	    start_ctrl f_k ctrl f new_ctrl ()
-	in f_control
+	in f_control *)
 
-    let rml_control' (n, _, _) p =
-      fun f_k ctrl ->
+    let rml_control' (n, _, _) p = assert false
+      (* fun f_k ctrl ->
 	let new_ctrl = new_ctrl Susp in
 	let f = p (end_ctrl f_k new_ctrl) new_ctrl in
 	new_ctrl.cond <- (fun () -> Event.status n);
-	start_ctrl f_k ctrl f new_ctrl
+	start_ctrl f_k ctrl f new_ctrl *)
 
 (**************************************)
 (* control_match                      *)
 (**************************************)
-    let rml_control_match expr_evt matching p =
-      fun f_k ctrl ->
+    let rml_control_match expr_evt matching p = assert false
+      (* fun f_k ctrl ->
 	let new_ctrl = new_ctrl Susp in
 	let f = p (end_ctrl f_k new_ctrl) new_ctrl in
 	let f_control =
@@ -1251,17 +1335,17 @@ let rml_loop p =
 	    new_ctrl.cond <-
 	      (fun () -> Event.status n && matching (Event.value n));
 	    start_ctrl f_k ctrl f new_ctrl ()
-	in f_control
+	in f_control *)
 
-    let rml_control_match' (n, _, _) matching p =
-      fun f_k ctrl ->
+    let rml_control_match' (n, _, _) matching p = assert false
+      (* fun f_k ctrl ->
 	let new_ctrl = new_ctrl Susp in
 	let f = p (end_ctrl f_k new_ctrl) new_ctrl in
 	new_ctrl.cond <- (fun () -> Event.status n && matching (Event.value n));
-	start_ctrl f_k ctrl f new_ctrl
+	start_ctrl f_k ctrl f new_ctrl *)
 
-    let rml_control_match_conf expr_cfg matching p =
-      fun f_k ctrl ->
+    let rml_control_match_conf expr_cfg matching p = assert false
+      (* fun f_k ctrl ->
         let new_ctrl = new_ctrl Susp in
         let f = p (end_ctrl f_k new_ctrl) new_ctrl in
         let f_control =
@@ -1269,14 +1353,14 @@ let rml_loop p =
             let cond, get, _ = expr_cfg true in
             new_ctrl.cond <- (fun () -> cond () && matching (get ()));
             start_ctrl f_k ctrl f new_ctrl ()
-        in f_control
+        in f_control *)
 
 (**************************************)
 (* control_conf                       *)
 (**************************************)
 
-    let rml_control_conf expr_cfg p =
-      fun f_k ctrl ->
+    let rml_control_conf expr_cfg p = assert false
+(*      fun f_k ctrl ->
 	let new_ctrl = new_ctrl Susp in
 	let f = p (end_ctrl f_k new_ctrl) new_ctrl in
 	let f_control =
@@ -1285,14 +1369,15 @@ let rml_loop p =
 	    new_ctrl.cond <- cond;
 	    start_ctrl f_k ctrl f new_ctrl ()
 	in f_control
+	*)
 
 
 (**************************************)
 (* when                               *)
 (**************************************)
 
-    let step_when _f_k ctrl (n,wa,wp) f new_ctrl dummy =
-      let w = if ctrl.kind = Top then wa else wp in
+    let step_when _f_k ctrl (n,wa,wp) f new_ctrl dummy = assert false
+(*      let w = if ctrl.kind = Top then wa else wp in
       new_ctrl.cond <- (fun () -> Event.status n);
       let rec f_when =
 	fun _ ->
@@ -1333,10 +1418,10 @@ let rml_loop p =
 	     sched())
       in
       dummy := f_when;
-      start_when
+      start_when *)
 
-      let rml_when expr_evt p =
-      fun f_k ctrl ->
+      let rml_when expr_evt p = assert false
+      (* fun f_k ctrl ->
 	let dummy = ref dummy_step in
 	let new_ctrl = new_ctrl (When dummy) in
 	let f = p (end_ctrl f_k new_ctrl) new_ctrl in
@@ -1345,17 +1430,18 @@ let rml_loop p =
 	    let evt = expr_evt () in
 	    step_when f_k ctrl evt f new_ctrl dummy unit_value
 	in
-	start_when
+	start_when *)
 
-    let rml_when' evt p =
-      fun f_k ctrl ->
+    let rml_when' evt p = assert false
+      (* fun f_k ctrl ->
 	let dummy = ref dummy_step in
 	let new_ctrl = new_ctrl (When dummy) in
 	let f = p (end_ctrl f_k new_ctrl) new_ctrl in
 	let start_when =
 	  step_when f_k ctrl evt f new_ctrl dummy
 	in
-	start_when
+	start_when *)
+	
 
 (**************************************)
 (* when_conf                          *)
@@ -1431,16 +1517,20 @@ let rml_loop p =
       fun f_k _ctrl ->
 	let f_join_n =
 	  fun _ ->
-	    decr cpt;
-	    if !cpt = 0 then
-	      f_k unit_value
+			Mutex.lock (snd cpt);
+	    decr (fst cpt);
+	    if !(fst cpt) = 0 then
+				begin
+					Mutex.unlock (snd cpt);
+		      f_k unit_value
+				end
 	    else
-	      sched ()
+	      Mutex.unlock (snd cpt)
 	in f_join_n
 
     let rml_fordopar e1 e2 dir p =
       fun f_k ctrl ->
-	let cpt = ref 0 in
+	let cpt = newRef 0 in
 	let j = join_n cpt f_k ctrl in
 	let f_fordopar =
 	  fun _ ->
@@ -1448,32 +1538,34 @@ let rml_loop p =
 	      begin
 		let min = e1() in
 		let max = e2() in
-		cpt := max - min + 1;
-		if !cpt <= 0 then
+		fst cpt := max - min + 1;
+		if !(fst cpt) <= 0 then
 		  f_k unit_value
 		else
 		  begin
+				Mutex.lock (snd current);
 		    for i = max downto min do
 		      let f = p i j ctrl in
-		      current := f :: !current
+		      fst current := (T.async pool f) :: !(fst current)
 		    done;
-		    sched()
+				Mutex.unlock (snd current)
 		  end
 	      end
 	    else
 	      begin
 		let max = e1() in
 		let min = e2() in
-		cpt := max - min + 1;
-		if !cpt <= 0 then
+		fst cpt := max - min + 1;
+		if !(fst cpt) <= 0 then
 		  f_k unit_value
 		else
 		  begin
+				Mutex.lock (snd current);
 		    for i = min to max do
 		      let f = p i j ctrl in
-		      current := f :: !current
+		      fst current := T.async pool f :: !(fst current)
 		    done;
-		    sched ()
+		    Mutex.unlock (snd current);
 		  end
 	      end
 	in
@@ -1509,12 +1601,14 @@ let rml_loop p =
       let f_get_cfg_eoi _ =
         let x = get () in
         let f_body = p x f_k ctrl in
-        ctrl.next <- f_body :: ctrl.next;
-        sched ()
+        (Mutex.lock ctrl.mutex;
+					ctrl.next <- f_body :: ctrl.next;
+					Mutex.unlock ctrl.mutex)
       in
       fun _ ->
-        weoi := f_get_cfg_eoi :: !weoi;
-        sched ()
+				(Mutex.lock (snd weoi);
+	        fst weoi := f_get_cfg_eoi :: !(fst weoi);
+					Mutex.unlock (snd weoi))
 
     let rml_await_all_conf expr_cfg p =
       fun f_k ctrl ->
@@ -1579,14 +1673,15 @@ let rml_loop p =
     let rml_par_n p_list =
       fun f_k ctrl ->
 	let nb = List.length p_list in
-	let cpt = ref nb in
+	let cpt = newRef nb in
 	let j = join_n cpt f_k ctrl in
-	let f_list = List.rev_map (fun p -> p j ctrl) p_list in
+	let f_list = List.map (fun p -> p j ctrl) p_list in
 	let f_par_n =
 	  fun _ ->
-	    cpt := nb;
-	    current := rev_app f_list !current;
-	    sched()
+	    fst cpt := nb;
+			Mutex.lock (snd current);
+	    fst current := rev_app (List.rev_map (T.async pool) f_list) !(fst current);
+			Mutex.unlock (snd current);
 	in f_par_n
 
     let _rml_seq_n p_list =
@@ -1603,18 +1698,26 @@ let rml_loop p =
 (* rml_make                                       *)
 (**************************************************)
     let rml_make p =
-      let result = ref None in
+     let result = ref None in
       (* the main step function *)
       let f = p () (fun x -> result := Some x; raise End) top in
-      current := [f];
+      fst to_launch := [f];
       (* the react function *)
       let rml_react () =
 	try
-	  sched ();
+		await ();
+		(* print_int (List.length !toWakeUp);
+		print_string " ";
+		print_int (List.length !current);
+		print_string " ";
+		print_int (List.length !to_launch);
+		print_string " ";
+		print_int (List.length !weoi);
+		print_endline " <- left"; *)
 	  eoi := true;
 	  wakeUp weoi;
 	  wakeUpAll ();
-	  sched ();
+	  await ();
 	  eval_control_and_next_to_current ();
 	  Event.next ();
 	  eoi := false;
@@ -1629,8 +1732,8 @@ let rml_loop p =
 (* rml_make_unit                                  *)
 (**************************************************)
 
-    let rml_make_unit (p: unit process) =
-
+    let rml_make_unit (p: unit process) = assert false
+(*
       (* Function to create the last continuation of a toplevel process *)
       let join_end =
 	let term_cpt = ref 0 in
@@ -1672,13 +1775,13 @@ let rml_loop p =
       in
 
       rml_react, add_process
-
+*)
 (**************************************************)
 (* rml_make_exec_process                          *)
 (**************************************************)
 
-    let rml_make_exec_process (p: unit process) =
-
+    let rml_make_exec_process (p: unit process) = assert false
+(*
       (* Function to create the last continuation of a toplevel process *)
       let join_end =
 	let term_cpt = ref 0 in
@@ -1687,7 +1790,7 @@ let rml_loop p =
 	  let f _x =
 	    decr term_cpt;
 	    if !term_cpt > 0 then
-	      sched()
+	      ()
 	    else
 	      raise End
 	  in f
@@ -1696,22 +1799,22 @@ let rml_loop p =
       (* the add_process function*)
       let add_process p =
 	let f =  p () (join_end()) top in
-	current := f :: !current
+	current := (T.async pool f) :: !current
       in
 
       (* the main step function *)
       let f = p () (join_end()) top in
-      current := [f];
+      current := [T.async pool f];
 
       (* the react function *)
       let rml_react proc_list =
 	try
 	  List.iter add_process proc_list;
-	  sched ();
+	  await();
 	  eoi := true;
 	  wakeUp weoi;
 	  wakeUpAll ();
-	  sched ();
+		await();
 	  eval_control_and_next_to_current ();
 	  Event.next ();
 	  eoi := false;
@@ -1722,6 +1825,6 @@ let rml_loop p =
 
       rml_react
 
-
+*)
 
   end (* Module Rml_interpreter *)
