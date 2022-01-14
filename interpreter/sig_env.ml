@@ -36,13 +36,16 @@ module type S =
     val default: ('a, 'b) t -> 'b
     val one: ('a, 'a list) t -> 'a
 
+    val lock: unit -> unit
+    val unlock: unit -> unit
+
     val emit: ('a, 'b) t -> 'a -> unit
 
     val next: unit -> unit
 
   end
 
-module Record  (*: S*)  =
+module Record  : S  =
   struct
 
     type kind = Default | Memory
@@ -54,8 +57,9 @@ module Record  (*: S*)  =
 	  mutable last: 'b;
 	  default: 'b;
 	  combine: ('a -> 'b -> 'b);
-          kind: kind;
-    mutex: Mutex.t }
+          kind: kind; }
+
+    let mutex = Mutex.create ()
 
     let instant = ref 0
     let absent = -2
@@ -67,8 +71,7 @@ module Record  (*: S*)  =
 	last = default;
 	default = default;
 	combine = combine;
-        kind = Default;
-        mutex = Mutex.create () }
+        kind = Default; }
 
     let create_memory default combine =
       { status = absent;
@@ -77,14 +80,17 @@ module Record  (*: S*)  =
         last = default;
         default = default;
         combine = combine;
-        kind = Memory;
-        mutex = Mutex.create () }
+        kind = Memory; }
 
 (* -------------------------- Access functions -------------------------- *)
     let default n = n.default
     let status n = n.status = !instant
 
     let value n = n.value
+
+    let lock () = Mutex.lock mutex
+
+    let unlock () = Mutex.unlock mutex
 
     let pre_status n =
       if n.status = !instant
@@ -116,7 +122,6 @@ module Record  (*: S*)  =
 (* emit                                *)
 (***************************************)
     let emit n v =
-      Mutex.lock n.mutex;
       if n.status <> !instant
       then
 	(n.pre_status <- n.status;
@@ -127,8 +132,7 @@ module Record  (*: S*)  =
          | Memory -> n.value <- n.combine v n.value
          end)
       else
-	n.value <- n.combine v n.value;
-      Mutex.unlock n.mutex
+	n.value <- n.combine v n.value
 
 (***************************************)
 (* next                                *)
@@ -236,6 +240,12 @@ module Class : S =
       | x :: _ -> x
       | _ -> assert false
 
+    let mutex = Mutex.create ()
+
+    let lock () = Mutex.lock mutex
+
+    let unlock () = Mutex.unlock mutex
+
 (***************************************)
 (* emit                                *)
 (***************************************)
@@ -257,7 +267,7 @@ module Class : S =
   end
 
 
-module Hashtbl (*: S*) =
+module Hashtbl (*: S *) =
   struct
     type ('a, 'b) t = string
 
@@ -336,6 +346,12 @@ module Hashtbl (*: S*) =
       match evt_struct.value with
       | x :: _ -> x
       | _ -> assert false
+
+    let mutex = Mutex.create ()
+
+    let lock () = Mutex.lock mutex
+
+    let unlock () = Mutex.unlock mutex
 
 (***************************************)
 (* emit                                *)

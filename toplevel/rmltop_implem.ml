@@ -90,6 +90,12 @@ module Sig_env (* : S *) =
       | x :: _ -> x
       | _ -> assert false
 
+    let mutex = Mutex.create ()
+
+    let lock () = Mutex.lock mutex
+
+    let unlock () = Mutex.unlock mutex
+
 (***************************************)
 (* emit                                *)
 (***************************************)

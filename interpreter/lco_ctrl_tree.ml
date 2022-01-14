@@ -45,12 +45,16 @@ module Rml_interpreter : Lco_interpreter.S =
 
     exception RML
 
+		module T = Domainslib.Task;;
+
+		module C = Domainslib.Chan;;
+
 		type 'a secureRef = 'a ref * Mutex.t;;
 
     type ('a, 'b) event =
-	('a,'b) Event.t * unit step list secureRef * unit step list secureRef
+	('a,'b) Event.t * unit step C.t * unit step C.t
     and 'a event_cfg =
-        bool -> (unit -> bool) * (unit -> 'a) * unit step list secureRef list
+        bool -> (unit -> bool) * (unit -> 'a) * unit step C.t list
 
     and control_tree =
 	{ kind: control_type;
@@ -58,7 +62,7 @@ module Rml_interpreter : Lco_interpreter.S =
 	  mutable susp: bool;
 	  mutable cond: (unit -> bool);
 	  mutable children: control_tree list;
-	  mutable next: next;
+	  next: unit step C.t;
 		mutex: Mutex.t }
     and control_type =
 	Top
@@ -81,9 +85,6 @@ module Rml_interpreter : Lco_interpreter.S =
       | f :: x1' -> rev_app x1' (f::x2)
 
 (* liste des processus a executer dans l'instant *)
-		module T = Domainslib.Task;;
-
-		module C = Domainslib.Chan;;
 
 		let current = C.make_unbounded ()
 
@@ -92,16 +93,22 @@ module Rml_interpreter : Lco_interpreter.S =
 
 		let pool = T.setup_pool ~num_additional_domains:3 ()
 
+		let empty_chan chan f =
+			let rec aux = function
+				| Some x -> begin
+						f x;
+						aux (C.recv_poll chan);
+					end
+				| None -> ()
+			in aux (C.recv_poll chan)
+
 (* liste des listes de processus a revillier a la fin d'instant *)
     let toWakeUp = C.make_unbounded ();;
     let wakeUpAll () =
 			let rec aux = function
 				| Some wp -> 
 					begin
-						Mutex.lock (snd wp);
-						List.iter (fun p -> assert (C.send_poll to_launch p)) !(fst wp);
-						fst wp := [];
-						Mutex.unlock (snd wp);
+						empty_chan wp (fun p -> assert (C.send_poll to_launch p));
 						aux (C.recv_poll toWakeUp)
 					end
 				| None -> ()
@@ -114,7 +121,7 @@ module Rml_interpreter : Lco_interpreter.S =
 	susp = false;
 	children = [];
 	cond = (fun () -> false);
-	next = [];
+	next = C.make_unbounded ();
 	mutex = Mutex.create () }
 
 (* tuer un arbre p *)
@@ -122,7 +129,7 @@ module Rml_interpreter : Lco_interpreter.S =
 			Mutex.lock p.mutex;
       p.alive <- true;
       p.susp <- false;
-      p.next <- [];
+			empty_chan p.next (fun _ -> ());
       List.iter set_kill p.children;
       p.children <- [];
 			Mutex.unlock p.mutex
@@ -139,7 +146,7 @@ module Rml_interpreter : Lco_interpreter.S =
 	  | Kill f_k ->
 	      if p.cond()
 	      then
-		(pere.next <- f_k :: pere.next;
+		( assert (C.send_poll pere.next f_k);
 		 set_kill p;
 		 false)
 	      else
@@ -150,7 +157,7 @@ module Rml_interpreter : Lco_interpreter.S =
 	  | Kill_handler handler ->
 	      if p.cond()
 	      then
-		(pere.next <- (handler()) :: pere.next;
+		(assert (C.send_poll pere.next (handler()));
 		 set_kill p;
 		 false)
 	      else
@@ -176,7 +183,7 @@ module Rml_interpreter : Lco_interpreter.S =
 	      then true
 	      else
 		(p.susp <- true;
-		 pere.next <- !f_when :: pere.next;
+		 assert (C.send_poll pere.next !f_when);
 		 p.children <- eval_children p p.children false [];
 		 true)
 	else
@@ -192,11 +199,9 @@ module Rml_interpreter : Lco_interpreter.S =
 	    else eval_children p nodes active acc
 
       and next_to_current node =
-				List.iter (fun p -> assert (C.send_poll to_launch p)) node.next;
-	node.next <- []
+				empty_chan node.next (fun p -> assert (C.send_poll to_launch p))
       and next_to_father pere node =
-	pere.next <- rev_app node.next pere.next;
-	node.next <- []
+				empty_chan node.next (fun p -> assert (C.send_poll pere.next p))
       in
       fun () ->
 	top.children <- eval_children top top.children true [];
@@ -207,35 +212,35 @@ module Rml_interpreter : Lco_interpreter.S =
     let rec next_to_current b p =
 			assert b;
       if p.alive && not p.susp then
-	(Mutex.lock p.mutex;
-	 (List.iter (fun p -> assert (C.send_poll current (T.async pool p))) p.next);
-	 p.next <- [];
-	 Mutex.unlock p.mutex;
+	(empty_chan p.next (fun p -> assert (C.send_poll current (T.async pool p)));
 	 List.iter (next_to_current b) p.children)
       else ()
 
 (* debloquer les processus en attent d'un evt *)
-    let wakeUp w =
-			Mutex.lock (snd w);
-			List.iter (fun p -> assert (C.send_poll to_launch p)) !(fst w);
-      fst w := [];
-			Mutex.unlock (snd w)
+    let wakeUp b w =
+			if b
+			then
+				empty_chan w (fun p -> assert (C.send_poll current (T.async pool p)))
+			else
+				empty_chan w (fun p -> assert (C.send_poll to_launch p))
 
 
 (* creation d'evenements *)
     let new_evt_combine default combine =
       (Event.create default combine,
-       newRef ([]: unit step list), newRef ([]: unit step list))
+			 (C.make_unbounded () : unit step C.t),
+			 (C.make_unbounded () : unit step C.t))
 
     let new_evt_memory_combine default combine =
       (Event.create_memory default combine,
-       newRef ([]: unit step list), newRef ([]: unit step list))
+			(C.make_unbounded () : unit step C.t),
+			(C.make_unbounded () : unit step C.t))
 
     let new_evt() =
       new_evt_combine [] (fun x y -> x :: y)
 
     let eoi = ref false
-    let weoi = newRef []
+    let weoi = C.make_unbounded ()
 
     let unit_value = ()
     let dummy_step _ = ()
@@ -358,10 +363,7 @@ module Rml_interpreter : Lco_interpreter.S =
       fun f_k ctrl ->
 	let f_pause =
 	  fun _ ->
-			Mutex.lock (ctrl.mutex);
-	    ctrl.next <- f_k :: ctrl.next;
-			Mutex.unlock (ctrl.mutex);
-	    ()
+			assert (C.send_poll ctrl.next f_k)
 	in f_pause
 
 (**************************************)
@@ -390,9 +392,11 @@ module Rml_interpreter : Lco_interpreter.S =
 (* emit                               *)
 (**************************************)
     let step_emit f_k _ctrl (n,wa,wp) e _ =
+			Event.lock ();
       Event.emit n (e());
-      wakeUp wa;
-      wakeUp wp;
+      wakeUp true wa;
+      wakeUp true wp;
+			Event.unlock ();
       f_k unit_value
 
     let rml_emit_val expr_evt e =
@@ -413,9 +417,11 @@ module Rml_interpreter : Lco_interpreter.S =
     let rml_emit' evt = rml_emit_val' evt (fun() -> ())
 
     let rml_expr_emit_val (n,wa,wp) v =
+			Event.lock ();
       Event.emit n v;
-      wakeUp wa;
-      wakeUp wp
+      wakeUp true wa;
+      wakeUp true wp;
+			Event.unlock ()
 
     let rml_expr_emit evt =
       rml_expr_emit_val evt ()
@@ -428,31 +434,33 @@ module Rml_interpreter : Lco_interpreter.S =
       if ctrl.kind = Top then
 	let rec f_await_top =
 	  fun _ ->
+			Event.lock ();
 	    if Event.status n
 	    then
+				let () = Event.unlock () in
 	      f_k unit_value
 	    else
-	      (Mutex.lock (snd w);
-				fst w := f_await_top :: !(fst w);
-				Mutex.unlock (snd w))
+				let () = 
+	      assert (C.send_poll w f_await_top)
+				in Event.unlock ()
 	in f_await_top
       else
 	let rec f_await_not_top =
 	  fun _ ->
+			Event.lock ();
 	    if Event.status n
 	    then
+				let () = Event.unlock () in
 	      f_k unit_value
 	    else
+				let () = 
 	      if !eoi
 	      then
-		(Mutex.lock (ctrl.mutex);
-			ctrl.next <- f_await_not_top :: ctrl.next;
-			Mutex.unlock (ctrl.mutex))
+		assert (C.send_poll ctrl.next f_await_not_top)
 	      else
-		(Mutex.lock (snd w);
-			fst w := f_await_not_top :: !(fst w);
-			Mutex.unlock (snd w);
-			assert (C.send_poll toWakeUp w))
+		(assert (C.send_poll w f_await_not_top);
+		 assert (C.send_poll toWakeUp w))
+				in Event.unlock ()
 	in f_await_not_top
 
     let rml_await_immediate expr_evt =
@@ -478,18 +486,25 @@ module Rml_interpreter : Lco_interpreter.S =
 	  let f_await_top =
 	    fun _ ->
 	      let is_true, _, w_list = expr_cfg true in
+				Event.lock ();
 	      if is_true() then
-		f_k unit_value
+		begin
+			Event.unlock ();
+			f_k unit_value
+		end
 	      else
 		let ref_f = ref None in
 		let f w step_wake_up =
+			Event.lock ();
 		  if is_true() then
 		    (ref_f := None;
+				 Event.unlock ();
 		     f_k unit_value)
 		  else
-		    (Mutex.lock (snd w);
-				 fst w := step_wake_up :: !(fst w);
-		     Mutex.unlock (snd w))
+				begin
+					assert (C.send_poll w step_wake_up);
+					Event.unlock ();
+				end
 		in
 		let gen_step w =
 		  let rec step_wake_up _ =
@@ -498,34 +513,42 @@ module Rml_interpreter : Lco_interpreter.S =
 		    | Some f -> f w step_wake_up
 		  in step_wake_up
 		in
-		ref_f := Some f;
-		List.iter
-		  (fun w -> Mutex.lock (snd w); fst w := (gen_step w) :: !(fst w); Mutex.unlock (snd w))
-		  w_list
+		begin
+			ref_f := Some f;
+			List.iter
+				(fun w -> assert (C.send_poll w (gen_step w)))
+				w_list;
+				Event.unlock ()
+		end
 	  in f_await_top
 	else
 	  let f_await_not_top =
 	    fun _ ->
 	      let is_true, _, w_list = expr_cfg false in
+				Event.lock ();
 	      if is_true() then
-		f_k unit_value
+		begin
+			Event.unlock ();
+			f_k unit_value
+		end
 	      else
 		let ref_f = ref None in
 		let f w step_wake_up =
+			Event.lock ();
 		  if is_true() then
 		    (ref_f := None;
+				 Event.unlock ();
 		     f_k unit_value)
 		  else
-		    if !eoi
-		    then
-		      (Mutex.lock ctrl.mutex;
-			     ctrl.next <- step_wake_up :: ctrl.next;
-		       Mutex.unlock ctrl.mutex)
-		    else
-		      (Mutex.lock (snd w);
-					 fst w := step_wake_up :: !(fst w);
-					 Mutex.unlock (snd w);
-					 assert (C.send_poll toWakeUp w))
+				begin
+					if !eoi
+					then
+						assert (C.send_poll ctrl.next step_wake_up)
+					else
+						(assert (C.send_poll w step_wake_up);
+						assert (C.send_poll toWakeUp w));
+					Event.unlock ();
+				end
 		in
 		let gen_step w =
 		  let rec step_wake_up _ =
@@ -534,14 +557,15 @@ module Rml_interpreter : Lco_interpreter.S =
 		    | Some f -> f w step_wake_up
 		  in step_wake_up
 		in
-		ref_f := Some f;
-		List.iter
-		  (fun w ->
-				Mutex.lock (snd w);
-		    fst w := (gen_step w) :: !(fst w);
-				Mutex.unlock (snd w);
-				assert (C.send_poll toWakeUp w))
-		  w_list
+		begin
+			ref_f := Some f;
+			List.iter
+				(fun w ->
+					assert (C.send_poll w (gen_step w));
+					assert (C.send_poll toWakeUp w))
+				w_list;
+			Event.unlock ();
+		end 
 	  in f_await_not_top
 
 (**************************************)
@@ -550,6 +574,7 @@ module Rml_interpreter : Lco_interpreter.S =
     let step_get f_k ctrl (n,_,_) p =
       let rec f_get =
 	fun _ ->
+		Event.lock ();
 	  if !eoi
 	  then
 	    let x =
@@ -558,15 +583,10 @@ module Rml_interpreter : Lco_interpreter.S =
 	      else Event.default n
 	    in
 	    let f_body = p x f_k ctrl in
-			begin
-				Mutex.lock (ctrl.mutex);
-		    ctrl.next <- f_body :: ctrl.next;
-				Mutex.unlock (ctrl.mutex);
-			end
+			assert (C.send_poll ctrl.next f_body)
 	  else
-			(Mutex.lock (snd weoi);
-	    fst weoi := f_get :: !(fst weoi);
-			Mutex.unlock (snd weoi))
+			assert (C.send_poll weoi f_get);
+		Event.unlock ();
       in f_get
 
     let rml_get expr_evt p =
@@ -595,33 +615,35 @@ module Rml_interpreter : Lco_interpreter.S =
 	if ctrl.kind = Top then
 	  let rec f_await_one_top =
 	    fun _ ->
+				Event.lock ();
 	      if Event.status n
 	      then
 		let x = Event.one n in
+		let () = Event.unlock () in
 		p x f_k ctrl unit_value
 	      else
-		(Mutex.lock (snd w);
-			fst w := f_await_one_top :: !(fst w);
-			Mutex.unlock (snd w))
+		(assert (C.send_poll w f_await_one_top);
+		 Event.unlock ())
 	  in f_await_one_top
 	else
 	  let rec f_await_one_not_top =
 	    fun _ ->
+				Event.lock ();
 	      if Event.status n
 	      then
 		let x = Event.one n in
+		let () = Event.unlock () in
 		p x f_k ctrl unit_value
 	      else
+					begin
 		if !eoi
 		then
-		  (Mutex.lock ctrl.mutex;
-			 ctrl.next <- f_await_one_not_top :: ctrl.next;
-		   Mutex.unlock ctrl.mutex)
+		  assert (C.send_poll ctrl.next f_await_one_not_top)
 		else
-		  (Mutex.lock (snd w);
-			 fst w := f_await_one_not_top :: !(fst w);
-			 Mutex.unlock (snd w);
-			 assert (C.send_poll toWakeUp w))
+		  (assert (C.send_poll w f_await_one_not_top);
+			 assert (C.send_poll toWakeUp w));
+		Event.unlock ();
+					end 
 	  in f_await_one_not_top
       in f_await_one
 
@@ -721,7 +743,8 @@ module Rml_interpreter : Lco_interpreter.S =
 	if ctrl.kind = Top then
 	  let gen_f_await_top ref_f =
             let f_await_top w step_wake_up =
-	      if !eoi
+				Event.lock ();
+	      (if !eoi
 	      then
 		let v = get () in
 		if is_true () && matching v
@@ -729,23 +752,16 @@ module Rml_interpreter : Lco_interpreter.S =
                   (ref_f := None;
 		   let x = v in
 		   let f_body = p x f_k ctrl in
-			 Mutex.lock (ctrl.mutex);
-		   ctrl.next <- f_body :: ctrl.next;
-			 Mutex.unlock (ctrl.mutex))
+			 assert (C.send_poll ctrl.next f_body))
 		else
-		  (Mutex.lock (snd w);
-				fst w := (step_wake_up w) :: !(fst w);
-				Mutex.unlock (snd w))
+		  assert (C.send_poll w (step_wake_up w))
 	      else
 		if is_true ()
 		then
-		  (Mutex.lock (snd weoi);
-				fst weoi := (step_wake_up w) :: !(fst weoi);
-				Mutex.unlock (snd weoi))
+		  assert (C.send_poll weoi (step_wake_up w))
 		else
-		  (Mutex.lock (snd w);
-				fst w := (step_wake_up w) :: !(fst w);
-				Mutex.unlock (snd w))
+		  assert (C.send_poll w (step_wake_up w)));
+				Event.unlock ()
             in f_await_top
 	  in
           fun () ->
@@ -755,15 +771,14 @@ module Rml_interpreter : Lco_interpreter.S =
             ref_f := Some f_await_top;
             List.iter
               (fun w ->
-								Mutex.lock (snd w);
-                fst w := (step_wake_up w) :: !(fst w);
-								Mutex.unlock (snd w);
+								assert (C.send_poll w (step_wake_up w));
 								assert (C.send_poll toWakeUp w))
               w_list;
             ();
 	else
 	  let gen_f_await_not_top ref_f =
 	    let f_await_not_top w step_wake_up =
+				Event.lock ();
 	      if !eoi
 	      then
 		let v = get () in
@@ -772,18 +787,13 @@ module Rml_interpreter : Lco_interpreter.S =
                   (ref_f := None;
 		   let x = v in
 		   let f_body = p x f_k ctrl in
-			 Mutex.lock ctrl.mutex;
-		   ctrl.next <- f_body :: ctrl.next;
-			 Mutex.unlock ctrl.mutex)
+			 assert (C.send_poll ctrl.next f_body))
 		else
-		    (Mutex.lock ctrl.mutex;
-				ctrl.next <- (step_wake_up w) :: ctrl.next;
-				Mutex.unlock ctrl.mutex)
+		    assert (C.send_poll ctrl.next (step_wake_up w))
 	      else
-		(Mutex.lock (snd w);
-			fst w := (step_wake_up w) :: !(fst w);
-			Mutex.unlock (snd w);
-			assert (C.send_poll toWakeUp w))
+		(assert (C.send_poll w (step_wake_up w));
+			assert (C.send_poll toWakeUp w));
+				Event.unlock ()
             in f_await_not_top
           in
           fun () ->
@@ -793,9 +803,7 @@ module Rml_interpreter : Lco_interpreter.S =
             ref_f := Some f_await_not_top;
             List.iter
               (fun w ->
-								Mutex.lock (snd w);
-                fst w := (step_wake_up w) :: !(fst w);
-								Mutex.unlock (snd w);
+								assert (C.send_poll w (step_wake_up w));
 								assert (C.send_poll toWakeUp w))
               w_list;
       in f_await_all_match
@@ -812,20 +820,23 @@ module Rml_interpreter : Lco_interpreter.S =
     let step_present _f_k ctrl (n,_,wp) f_1 f_2 =
       let rec f_present =
 	fun _ ->
+		Event.lock ();
 	  if Event.status n
 	  then
-	    f_1 unit_value
+			begin
+				Event.unlock ();
+		    f_1 unit_value
+			end
 	  else
-	    if !eoi
-	    then
-	      (Mutex.lock ctrl.mutex;
-				ctrl.next <- f_2 :: ctrl.next;
-				Mutex.unlock ctrl.mutex)
-	    else
-	      (Mutex.lock (snd wp);
-				fst wp := f_present :: !(fst wp);
-				Mutex.unlock (snd wp);
-				assert (C.send_poll toWakeUp wp))
+			begin 
+				if !eoi
+				then
+					assert (C.send_poll ctrl.next f_2)
+				else
+					(assert (C.send_poll wp f_present);
+					assert (C.send_poll toWakeUp wp));
+				Event.unlock ()
+			end
       in f_present
 
     let rml_present expr_evt p_1 p_2 =
@@ -850,26 +861,28 @@ module Rml_interpreter : Lco_interpreter.S =
 	  let f_1 = p_1 f_k ctrl in
 	  let f_2 = p_2 f_k ctrl in
 	  let is_true, _, w_list = expr_cfg false in
+		Event.lock ();
 	  if is_true ()
 	  then
+			let () = Event.unlock () in
 	    f_1 unit_value
-	  else
+	  else begin
 	    let ref_f = ref None in
 	    let f w step_wake_up =
+				Event.lock ();
 	      if is_true() then
 		(ref_f := None;
+		 Event.unlock ();
 		 f_1 unit_value)
-	      else
+	      else begin
 		if !eoi
 		then
-		  (Mutex.lock ctrl.mutex;
-				ctrl.next <- f_2 :: ctrl.next;
-		    Mutex.unlock ctrl.mutex)
+			assert (C.send_poll ctrl.next f_2)
 		else
-		  (Mutex.lock (snd w);
-			 fst w := step_wake_up :: !(fst w);
-			 Mutex.unlock (snd w);
-			 assert (C.send_poll toWakeUp w))
+			(assert (C.send_poll w step_wake_up);
+			 assert (C.send_poll toWakeUp w));
+		Event.unlock ()
+				end 
 	    in
 	    let gen_step w =
 	      let rec step_wake_up _ =
@@ -881,11 +894,11 @@ module Rml_interpreter : Lco_interpreter.S =
 	    ref_f := Some f;
 	    List.iter
 	      (fun w ->
-					Mutex.lock (snd w);
-					fst w := (gen_step w) :: !(fst w);
-					Mutex.unlock (snd w);
+					assert (C.send_poll w (gen_step w));
 					assert (C.send_poll toWakeUp w))
-	      w_list
+	      w_list;
+			Event.unlock ()
+		end
 
 (**************************************)
 (* seq                                *)
@@ -1119,7 +1132,7 @@ let rml_loop p =
 	susp = false;
 	children = [];
 	cond = (fun () -> false);
-	next = [];
+	next = C.make_unbounded ();
 	mutex = Mutex.create () }
 
     let start_ctrl _f_k ctrl f new_ctrl =
@@ -1132,7 +1145,7 @@ let rml_loop p =
 	  else
 	    (new_ctrl.alive <- true;
 	     new_ctrl.susp <- false;
-	     new_ctrl.next <- []);
+	     empty_chan new_ctrl.next (fun _ -> ()));
 		Mutex.unlock ctrl.mutex;
 	  f unit_value
       in f_ctrl
@@ -1357,8 +1370,8 @@ let rml_loop p =
 (* control_conf                       *)
 (**************************************)
 
-    let rml_control_conf expr_cfg p = assert false
-(*      fun f_k ctrl ->
+    let rml_control_conf expr_cfg p =
+      fun f_k ctrl ->
 	let new_ctrl = new_ctrl Susp in
 	let f = p (end_ctrl f_k new_ctrl) new_ctrl in
 	let f_control =
@@ -1367,7 +1380,7 @@ let rml_loop p =
 	    new_ctrl.cond <- cond;
 	    start_ctrl f_k ctrl f new_ctrl ()
 	in f_control
-	*)
+
 
 
 (**************************************)
@@ -1381,6 +1394,7 @@ let rml_loop p =
 			 Mutex.unlock new_ctrl.mutex);
       let rec f_when =
 	fun _ ->
+		Event.lock ();
 	  if Event.status n
 	  then
 	    (Mutex.lock new_ctrl.mutex;
@@ -1390,14 +1404,11 @@ let rml_loop p =
 	  else
 	    if !eoi
 	    then
-	      (Mutex.lock ctrl.mutex;
-		     ctrl.next <- f_when :: ctrl.next;
-	       Mutex.unlock ctrl.mutex)
+				assert (C.send_poll ctrl.next f_when)
 	    else
-	      (Mutex.lock (snd w);
-				 fst w := f_when :: !(fst w);
-				 Mutex.unlock (snd w);
-	       if ctrl.kind <> Top then assert (C.send_poll toWakeUp w))
+				(assert (C.send_poll w f_when);
+	       if ctrl.kind <> Top then assert (C.send_poll toWakeUp w));
+			Event.unlock ()
       in
       let start_when =
 	fun _ ->
@@ -1410,24 +1421,26 @@ let rml_loop p =
 	    (Mutex.lock new_ctrl.mutex;
 			 new_ctrl.alive <- true;
 	     new_ctrl.susp <- false;
-	     new_ctrl.next <- [];
+	     empty_chan new_ctrl.next (fun _ -> ());
 			 Mutex.unlock new_ctrl.mutex);
+		Event.lock ();
 	  if Event.status n
 	  then
 	    (Mutex.lock new_ctrl.mutex;
 			 new_ctrl.susp <- false;
-	     new_ctrl.next <- [];
+	     empty_chan new_ctrl.next (fun _ -> ());
 			 Mutex.unlock new_ctrl.mutex;
+			 Event.unlock ();
 	     f unit_value)
 	  else
 	    (Mutex.lock new_ctrl.mutex;
 			 new_ctrl.susp <- true;
-	     new_ctrl.next <- [f];
+			 empty_chan new_ctrl.next (fun _ -> ());
+			 assert (C.send_poll new_ctrl.next f);
 			 Mutex.unlock new_ctrl.mutex;
-			 Mutex.lock (snd w);
-	     fst w := f_when :: !(fst w);
-			 Mutex.unlock (snd w);
-	     if ctrl.kind <> Top then assert (C.send_poll toWakeUp w))
+			 assert (C.send_poll w f_when);
+	     if ctrl.kind <> Top then assert (C.send_poll toWakeUp w);
+			 Event.unlock ())
       in
       dummy := f_when;
       start_when
@@ -1609,14 +1622,10 @@ let rml_loop p =
       let f_get_cfg_eoi _ =
         let x = get () in
         let f_body = p x f_k ctrl in
-        (Mutex.lock ctrl.mutex;
-					ctrl.next <- f_body :: ctrl.next;
-					Mutex.unlock ctrl.mutex)
+				assert (C.send_poll ctrl.next f_body)
       in
       fun _ ->
-				(Mutex.lock (snd weoi);
-	        fst weoi := f_get_cfg_eoi :: !(fst weoi);
-					Mutex.unlock (snd weoi))
+				assert (C.send_poll weoi f_get_cfg_eoi)
 
     let rml_await_all_conf expr_cfg p =
       fun f_k ctrl ->
@@ -1713,7 +1722,7 @@ let rml_loop p =
 	try
 		await ();
 	  eoi := true;
-	  wakeUp weoi;
+	  wakeUp false weoi;
 	  wakeUpAll ();
 	  await ();
 	  eval_control_and_next_to_current ();
