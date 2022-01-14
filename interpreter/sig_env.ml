@@ -54,7 +54,8 @@ module Record  (*: S*)  =
 	  mutable last: 'b;
 	  default: 'b;
 	  combine: ('a -> 'b -> 'b);
-          kind: kind; }
+          kind: kind;
+    mutex: Mutex.t }
 
     let instant = ref 0
     let absent = -2
@@ -66,7 +67,8 @@ module Record  (*: S*)  =
 	last = default;
 	default = default;
 	combine = combine;
-        kind = Default; }
+        kind = Default;
+        mutex = Mutex.create () }
 
     let create_memory default combine =
       { status = absent;
@@ -75,7 +77,8 @@ module Record  (*: S*)  =
         last = default;
         default = default;
         combine = combine;
-        kind = Memory; }
+        kind = Memory;
+        mutex = Mutex.create () }
 
 (* -------------------------- Access functions -------------------------- *)
     let default n = n.default
@@ -113,6 +116,7 @@ module Record  (*: S*)  =
 (* emit                                *)
 (***************************************)
     let emit n v =
+      Mutex.lock n.mutex;
       if n.status <> !instant
       then
 	(n.pre_status <- n.status;
@@ -123,7 +127,8 @@ module Record  (*: S*)  =
          | Memory -> n.value <- n.combine v n.value
          end)
       else
-	n.value <- n.combine v n.value
+	n.value <- n.combine v n.value;
+      Mutex.unlock n.mutex
 
 (***************************************)
 (* next                                *)
@@ -143,7 +148,6 @@ module Class : S =
 	val mutable status = false
 	val mutable pre_status = false
 	val mutable to_update = false
-
 	method status = status
 	method pre_status = pre_status
 

@@ -15,9 +15,17 @@
  (preprocess (pps ppx_rml))
  (modules darwin))
 
+(executable
+ (name compare_perf)
+ (promote (until-clean))
+ (flags (:standard -rectypes))
+ (libraries rmllib)
+ (preprocess (pps ppx_rml))
+ (modules compare_perf))
+
 (test
  (name test)
  (libraries alcotest rmllib)
  (flags (:standard -rectypes))
  (preprocess (pps ppx_rml))
- (modules (:standard \ pp darwin)))
+ (modules (:standard \ pp darwin compare_perf)))

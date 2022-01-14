@@ -25,7 +25,8 @@ let rec build_random n =
 let compute_n n = 
   let tree = Rml.build_random n in
   let nb = ref 0 in
-  Rml.run (Rml.iter_breadth (fun n -> nb := !nb + n) tree);
+  let m = Mutex.create () in
+  Rml.run (Rml.iter_breadth (fun n -> Mutex.lock m; nb := !nb + n; Mutex.unlock m) tree);
   !nb
 
 let test_rififi n () =
