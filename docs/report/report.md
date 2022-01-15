@@ -86,7 +86,22 @@ In order to get all the tools from the existing ReactiveML compiler to just chan
 The user encompasses his RML code with the `rml` extension. Thus the whole handler with register with the `rml` flag recieves the AST of the corresponding code. This AST first goes through the function `Ocaml2rml.main` that translate the OCaml's AST into a RML's AST. The AST obtained can now go through the whole typing and optimisation process inside the compiler. And at the backend of the compiler, instead of printing the OCaml code, the string representing the obtained code is given to OCaml's parser in order to obtain a new clean AST.
 
 However the AST obtained throught this method is a list of structure item when the preprocess accepts only a structure item. In order to go around this problem we encompass the code generated in a module (who is called RML by default).
+
 # Syntax and conversion
+
+## Compiler arguments
+
+## Signal definition
+
+## Process definition and signal emission
+
+## Await
+
+## Until
+
+## Control
+
+## Present
 
 # Our work
 
