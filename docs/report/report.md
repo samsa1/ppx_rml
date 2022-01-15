@@ -239,7 +239,7 @@ try%control
         global_value := !global_value + 1;
         if%present s2 then a := false;
       done
-    with [%event (a = s) || (a = s2)] when a = n -> print_endline "Not running" (* Can add a guard condition *)
+    with [%event (a = s) || (a = s2)] when a = n -> print_endline "Not running"
 ```
 
 ## Present
