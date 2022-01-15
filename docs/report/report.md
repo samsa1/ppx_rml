@@ -235,4 +235,12 @@ Most of the code in ReactiveML has been written by previous developpers of the p
 
 # Future extensions
 
-Prepare for OCaml 5.00
+## Feature that need to be implemented
+
+- change the ppx_rml backend in order to stop printing the code before parsing it
+
+## Feature that would be nice to have
+
+- support the effects from the next version of OCaml
+- update the interpreter to enable multithreading with OCaml 5.00
+- reduce the amount of structures and types that aren't supported in RML's AST.
