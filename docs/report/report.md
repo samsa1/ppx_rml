@@ -12,7 +12,11 @@ abstract: Des trucs blabla
 
 [ReactiveML](https://github.com/reactiveml/rml) is a synchronous, even-based language based on OCaml 3.4. It has been implemented using the original OCaml compiler a while back, and the OCaml part as not been updated since then, as every commit to the OCaml repository would have to get adapted and merged into RML. Thus ReactiveML only supports features that were present in this version, meaning that some things as modules and object-oriented structures, as well as any third-party extern OCaml library, cannot be used in ReactiveML, making it therefore a closed ecosystem that cannot access the rest of OCaml's one.
 
-Our project is aimed at addressing this issue by turning ReactiveML into an extension, via the ppx protocol, the the OCaml compiler, such that anyone can use ReactiveML inside an OCaml program while being free of usign any other OCaml feature.
+Our project is aimed at addressing this issue by turning ReactiveML into an extension, via the ppx protocol, the the OCaml compiler, such that anyone can use ReactiveML inside an OCaml program while being free of using any other feature from the language. Another benefit comes from the upcoming $5$.x.x OCaml version, which will bring multicore support. 
+
+An added benefit is that ReactiveML should become a lot more maintainable, as it now doesn't need its own parser, core libraries, etc. The only logic left in ReactiveML its core functionnalities and our ppx extension. All the rest comes from the stock OCaml distribution. This means that maintaining ReactiveML "only" involves keeping the ppx extension in sync with OCaml's syntax evolution, as well as updating the ReactiveML semantics themselves; no more custom legacy OCaml parsers, typers and codegen units!
+
+As an extension to our work, a multicore intepreter for ReactiveML yields computation time benefits. 
 
 # How it is done
 
@@ -114,8 +118,32 @@ For exemple if someone wants to give the flag `-sampling 0.01` to the compiler t
 In ReactiveML, a signal is defined as follows:
 
 ```ocaml
-let s = signal
+signal s default 0 gather (fun x y -> x + y)  in  ...
 ```
+
+We replaced it by:
+
+```ocaml
+let s = Signal { default = 0; gather = fun x y -> x + y } in ...
+```
+
+However, the ReactiveML syntax does not allow for simultaneous declarations involving signals, while our syntax obviously does allow it (because we use the `let .. = .. in ..` syntax). Thus some thought went into deciding how to handle such constructions as
+
+```ocaml
+let sp4 = Signal {default = 0; gather = fun x _ -> x}
+    and _useless_0 = 42
+    and sp5 = Signal {default = 0; gather = fun x _ -> x}
+    and _useless_1 = 69
+    in ((emit sp4 _useless_0) || (emit sp5 _useless_1))
+```
+
+In term, each definition of a signal inside a simultaneous declaration is first converted to a
+
+```ocaml
+let .. = (let rml_var = Signal {...} in rml_var) in ..
+```
+
+such that a signal definition is always done alone.
 
 ## Process definition and signal emission
 
