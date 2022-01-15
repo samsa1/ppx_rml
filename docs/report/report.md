@@ -139,6 +139,33 @@ To do this, the preprocess looks for the name `process` in each let binding. In 
 
 ## Await
 
+There exist to different `await` in RML :
+
+- `await s(l) /\ s2(l2) in expr` who binds the value `l` of the signal `s` and the value `l2` of signal `s2` in `expr` (this works like a `let l = ... in `)
+- and `await s` that just stop the process until the signal `s` is recieved.
+
+Both syntax have been handled in a different way.
+
+### Await s(l) in expr
+
+The `await s(l) /\ s2 = l2 in expr` has been rewritten as
+
+```ocaml
+let%await All = l = s && l2 = s2 in expr
+```
+
+Where `All` can be replaced by `Immediate One` or `One` depending of when you want the process to wake up (see RML's documentation for more information).
+
+### Await s
+
+On the other hand, `await s` is still written the same way, except that `/\` has been replace by `&&` and `\/` by `||`
+
+
+### When condition
+
+For both of then, the condition with a `when` can still be written, except that you write `When` and need to put parenthesis around the condition in order to avoid priority problems.
+
+
 ## Until
 
 ## Control
