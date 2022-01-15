@@ -10,13 +10,13 @@ abstract: This project aims at turning the current implementation of ReactiveML,
 
 # Motivation
 
-[ReactiveML](https://github.com/reactiveml/rml) is a synchronous, event-based language based on OCaml 3.4. It has been implemented using the original OCaml compiler v3.4, and the OCaml part as not been updated since then, as every commit to the OCaml repository would have to get adapted and merged into RML. Thus ReactiveML only supports features that were present in this version, meaning that some things such as modules and object-oriented structures, as well as any third-party extern OCaml library, cannot be used in ReactiveML, thus depriving the user of using features from the OCaml ecosystem from within ReactiveML code.
+[ReactiveML](https://github.com/reactiveml/rml) is a synchronous, event-based language based on OCaml 3.4. It has been implemented using the original OCaml compiler v3.4, and the OCaml part as not been updated since then, as every commit to the OCaml repository related to the parser would have to get adapted and merged into RML. Thus ReactiveML only supports features that were present in this version, meaning that some things such as modules and object-oriented structures, as well as any third-party extern OCaml library, cannot be used in ReactiveML, thus depriving the user of using features from the OCaml ecosystem from within ReactiveML code.
 
 Our project is aimed at addressing this issue by turning ReactiveML into an extension, via the ppx protocol, to the OCaml compiler, such that anyone can use ReactiveML inside an OCaml program while being free of using any other feature from the language. Another benefit comes from the upcoming $5$.x.x OCaml version, which will bring multicore support, meaning tweaking the ReactiveML interpreter to use multiple execution threads at once will come in the realm of possible things.
 
-An added benefit is that ReactiveML should become a lot more maintainable, as it now doesn't need its own parser, core libraries, etc. The only logic left in ReactiveML its core functionnalities and our ppx extension. All the rest comes from the stock OCaml distribution. This means that maintaining ReactiveML "only" involves keeping the ppx extension in sync with OCaml's syntax evolution, as well as updating the ReactiveML semantics themselves;.
+An added benefit is that ReactiveML should become a lot more maintainable, as it now doesn't need its own parser, core libraries, etc. The only logic left in ReactiveML its core functionnalities and our ppx extension. All the rest comes from the stock OCaml distribution. This means that maintaining ReactiveML "only" involves keeping the ppx extension in sync with OCaml's syntax evolution, as well as updating the ReactiveML semantics themselves.
 
-As an extension to our work, a multicore intepreter for ReactiveML yields computation time benefits. 
+As an extension to our work, a multicore intepreter for ReactiveML yields computation time benefits.
 
 # How it is done
 
@@ -26,14 +26,14 @@ The OCaml compiler provides a technology called PPX. A PPX rewriter is preproces
 
 To use this technology the user can add the following line into his `dune`file :
 
-```
+```lisp
 (preprocess (pps ppx_rml))
 ```
 
 On the other side, the developper writes a library called `ppx_rml` that register one or multiple flags.
 
 After parsing an OCaml code, the compiler search for flags in the AST. For every flag found, the
-associated subtree is given to the preprocess function associated with the flag. This function takes an AST node as argument and returns a new AST node.
+associated subtree is given to the handler associated with the flag. This function takes an AST node as argument and returns a new AST node.
 
 There are two types of PPX flags : attributes and extensions.
 
@@ -50,7 +50,7 @@ type point3d = float * float * float
 
 This exemples implements function for testing equality and printing elements of type `point3d` automaticaly. Thus the developper won't need to change them when he changes the type, everything is handled by the preprocess.
 
-An attribute is written with one to three `@` depending of the localisation inside the AST.
+An attribute is written with one to three `@` depending of the localisation inside the AST (one to associate it to a expression, two to associate it to a structure item and three to create a new independant structure item).
 
 ### Extension
 
@@ -70,7 +70,6 @@ let print_1_to_n n =
 
 Which is exactly the same as
 
-
 ```ocaml
 let print_1_to_n n =
     [%par
@@ -80,8 +79,6 @@ let print_1_to_n n =
     ];
     print_endline ()
 ```
-
-
 
 An extension is written with one or two `%` depending of the localisation inside the AST just like attributes.
 
@@ -113,7 +110,6 @@ For exemple if someone wants to give the flag `-sampling 0.01` to the compiler t
 ```
 
 ## Signal definition
-
 
 In ReactiveML, a signal is defined as follows:
 
@@ -164,7 +160,6 @@ Defines a process `p` that takes an argument called `a`.
 
 To do this, the preprocess looks for the name `process` in each let binding. In can it finds one, it takes the first argument of the function defined (because OCaml's parser understands `let process p = ...` as `let process = fun p -> ...`), uses it as the process name and modifes the rest to transform it into a process.
 
-
 ## Await
 
 There exist to different `await` in RML :
@@ -188,11 +183,9 @@ Where `All` can be replaced by `Immediate One` or `One` depending of when you wa
 
 On the other hand, `await s` is still written the same way, except that `/\` has been replace by `&&` and `\/` by `||`
 
-
 ### When condition
 
 For both of then, the condition with a `when` can still be written, except that you write `When` and need to put parenthesis around the condition in order to avoid priority problems.
-
 
 ## Until
 
@@ -263,7 +256,6 @@ let v_pre = pre s;;
 let v_last = last s;;
 let v_default = default s;;
 ```
-
 
 ## Ocaml expressions
 
