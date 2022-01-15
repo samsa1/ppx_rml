@@ -214,7 +214,33 @@ with [%event l = s] when l = 3 -> ()
 
 The reason we needed the `[%event ]` is that the parser wants a pattern at this place, when the rml syntax allowed any expression. Thus the extension wrapper allowed to write an expression while making the parser happy.
 
+## Do when
+
+The `do .. when ..` sutructure is implemented the same way as `until` :
+
+```ocaml
+try%when
+      while !a do
+        global_value := !global_value + 1;
+        if%present s2 then a := false;
+      done
+    with [%event s] -> print_endline "Not running"
+```
+
+However, contrarely to `do .. until ..`, this construct in ReactiveML does not allow to add a guard on the `with` branch and, as a result, the ppx preprocessing will fail if one is added, e.g. `with [%event a = s] when a = s -> print_endline "Not running"`.
+
 ## Control
+
+The `control .. with ..` is also similar to `do .. until` but it does allow addign a guard on the `with` branch:
+
+```ocaml
+try%control
+      while !a do
+        global_value := !global_value + 1;
+        if%present s2 then a := false;
+      done
+    with [%event (a = s) || (a = s2)] when a = n -> print_endline "Not running" (* Can add a guard condition *)
+```
 
 ## Present
 
@@ -225,8 +251,6 @@ We can use:
 ```ocaml
 if%present s then a := false else print_endline "Failed";
 ```
-
-## Do when
 
 ## Last, default, pre
 
