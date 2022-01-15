@@ -97,7 +97,7 @@ As the compiler is not called like it usually is, the way to pass arguments had 
 
 With the ppx version of the compiler the arguments are given as attributes in the first lines of the rml code.
 
-For exemple if someone wants to give the flag `-sampling 0.01` to the compiler than he just need to write `[@@@sampling 0.01]` in the first line of the rml code. Just like this :
+For exemple if someone wants to give the flag `-sampling 0.01` to the compiler than he just need to write `[@@@sampling 0.01]` in the first line of the rml code. Just like this (exemple taken from `test/darwin.ml`):
 
 ```ocaml
 [%%rml
@@ -109,6 +109,8 @@ For exemple if someone wants to give the flag `-sampling 0.01` to the compiler t
 ```
 
 ## Signal definition
+
+
 
 ## Process definition and signal emission
 
