@@ -13,7 +13,7 @@ header-includes:
 
 ## RML is old
 
-Unsupported structrues :
+Unsupported structures :
 
 - modules
 - classes
