@@ -7,6 +7,7 @@ report: ./report/report.md
 slides: ./slides/slides.md
 	pandoc -t beamer ./slides/slides.md --slide-level 2 --pdf-engine=xelatex -o artifacts/slides.pdf
 
-clean: rm -rf artifacts
+clean: 
+	rm -rf artifacts/*
 
 .PHONY: all clean
