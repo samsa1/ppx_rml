@@ -196,6 +196,24 @@ For both of then, the condition with a `when` can still be written, except that 
 
 ## Until
 
+In RML you have the possibility to execute a block of code until as certain event occurs. This can be written as :
+
+```ocaml
+do
+    block
+until s(l) when l = 3 
+```
+
+In ppx_rml this can be written as
+
+```ocaml
+try%until
+    block
+with [%event l = s] when l = 3 -> ()
+```
+
+The reason we needed the `[%event ]` is that the parser wants a pattern at this place, when the rml syntax allowed any expression. Thus the extension wrapper allowed to write an expression while making the parser happy.
+
 ## Control
 
 ## Present
@@ -203,6 +221,9 @@ For both of then, the condition with a `when` can still be written, except that 
 ## Do when
 
 ## Last, default
+
+
+## Ocaml expressions
 
 # Our work
 
