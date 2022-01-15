@@ -5,7 +5,7 @@ numbersections: True
 header-includes:
     - \usepackage{tikz}
     - \usetikzlibrary{chains, decorations.pathreplacing}
-abstract: Des trucs blabla
+abstract: This project aims at turning the current implementation of ReactiveML, a reactive language forked from OCaml around the 3.4 version, and whose pure-OCaml features have not been updated since, into an extension to the official OCaml compiler in order to gain access to all modern features and libraries as well as allow ReactiveML and OCaml code to interoperate transparently, even within a single program or module.
 ---
 
 # Motivation
