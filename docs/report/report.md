@@ -5,11 +5,12 @@ numbersections: True
 header-includes:
     - \usepackage{tikz}
     - \usetikzlibrary{chains, decorations.pathreplacing}
-toc: True
 abstract: Des trucs blabla
 ---
 
 # Motivation
+
+[ReactiveML](https://github.com/reactiveml/rml) 
 
 # How it is done
 
@@ -92,7 +93,7 @@ However the AST obtained throught this method is a list of structure item when t
 Most of the code in ReactiveML has been written by previous developpers of the projet. Our work resides in :
 
 - changing the build chain to `dune` (every dune files)
-- adding tests (`test` folder)
+- adding tests (`test` folder) using the `alcotest` opam library
 - adding the ppx version of the compiler (`compiler/main/rmlc.ml` and `compiler/parsing/ocaml2rml.ml`)
 
 # Future extensions
