@@ -119,6 +119,24 @@ let s = signal
 
 ## Process definition and signal emission
 
+Signals can be emitted in ppx_rml the same way than in RML.
+
+You just need to write `emit s` to emit the signal `s` or `emit s v` to emit the value `v` on the signal `s`.
+
+When the ppx preprocess finds a function application node where the expression corresponding to the function is the  
+identifier `emit` then we translate it to the corresponding node of the RML's AST.
+
+In a similar way process can be defined in ppx_rml the same way than in  RML. The syntax :
+
+```ocaml
+let process p a = expr
+```
+
+Defines a process `p` that takes an argument called `a`.
+
+To do this, the preprocess looks for the name `process` in each let binding. In can it finds one, it takes the first argument of the function defined (because OCaml's parser understands `let process p = ...` as `let process = fun p -> ...`), uses it as the process name and modifes the rest to transform it into a process.
+
+
 ## Await
 
 ## Until
