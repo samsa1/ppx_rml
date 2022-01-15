@@ -1,6 +1,6 @@
 ---
-title: A Ppx ReactiveML extension for OCaml
-author: Constantin \textsc{Gierczak-Galle} \& Samuel \textsc{Vivien}
+title: Towards a new interpreter for RML
+author: Samuel \textsc{Vivien}
 numbersections: True
 header-includes:
     - \usepackage{tikz}
@@ -9,8 +9,28 @@ toc: True
 abstract: Des trucs blabla
 ---
 
+# Disclaimer
+
+The whole code provided is not mine. The source has been taken from the project https://github.com/samsa1/ppx_rml. This project is itself based on the project ReactiveML.
+
+The project `ppx_rml` modified ReactiveML compiler in order to allow compilation thought PPX (see the report corresponding to this project in the folder `docs` of it's repository).
+
+The project presented here aims to present the modification done to the interpreter to take advantage of the `domainslib` library that will come with OCaml 5.00.
+
 # Motivation
 
+When writing those lines, OCaml 5.00 (also known as OCaml multicore) is due to April 04, 2022 says https://github.com/ocaml/ocaml/milestone/40.
+
+Even if this version has been promised for a long time, it is closer than ever. And demo versions are already available (`4.12.0+domains` and `4.12.0+domains+effects`).
+
+As shown in the demo versions above, the two main additions that OCaml 5 will have in comparison to OCaml 4 are multithreading and algebraic effects. While multithreading is quite intuitive, it is a bit more complicated to understand what effects are.
+
+## TODO
+
+ReactiveML is a reactive language based on OCaml who is simulating multi-threading. The arrival of a multi-threading in OCaml means that ReactiveML could benefit from it in order to improve the performances.
+
+
+## TODO
 # How it is done
 
 ## What is PPX
