@@ -10,7 +10,9 @@ abstract: Des trucs blabla
 
 # Motivation
 
-[ReactiveML](https://github.com/reactiveml/rml) 
+[ReactiveML](https://github.com/reactiveml/rml) is a synchronous, even-based language based on OCaml 3.4. It has been implemented using the original OCaml compiler a while back, and the OCaml part as not been updated since then, as every commit to the OCaml repository would have to get adapted and merged into RML. Thus ReactiveML only supports features that were present in this version, meaning that some things as modules and object-oriented structures, as well as any third-party extern OCaml library, cannot be used in ReactiveML, making it therefore a closed ecosystem that cannot access the rest of OCaml's one.
+
+Our project is aimed at addressing this issue by turning ReactiveML into an extension, via the ppx protocol, the the OCaml compiler, such that anyone can use ReactiveML inside an OCaml program while being free of usign any other OCaml feature.
 
 # How it is done
 
@@ -102,6 +104,10 @@ However the AST obtained throught this method is a list of structure item when t
 ## Control
 
 ## Present
+
+## Do when
+
+## Last, default
 
 # Our work
 
