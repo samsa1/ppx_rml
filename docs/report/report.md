@@ -44,7 +44,7 @@ type point3d = float * float * float
 
 This exemples implements function for testing equality and printing elements of type `point3d` automaticaly. Thus the developper won't need to change them when he changes the type, everything is handled by the preprocess.
 
-An attribute is written with one or two `@` depending of the localisation inside the AST (one for expressions and two for structure items).
+An attribute is written with one to three `@` depending of the localisation inside the AST.
 
 ### Extension
 
@@ -90,6 +90,21 @@ However the AST obtained throught this method is a list of structure item when t
 # Syntax and conversion
 
 ## Compiler arguments
+
+As the compiler is not called like it usually is, the way to pass arguments had to be changed.
+
+With the ppx version of the compiler the arguments are given as attributes in the first lines of the rml code.
+
+For exemple if someone wants to give the flag `-sampling 0.01` to the compiler than he just need to write `[@@@sampling 0.01]` in the first line of the rml code. Just like this :
+
+```ocaml
+[%%rml
+
+    [@@@sampling 0.01];;
+
+    code
+]
+```
 
 ## Signal definition
 
