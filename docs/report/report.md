@@ -111,6 +111,11 @@ For exemple if someone wants to give the flag `-sampling 0.01` to the compiler t
 ## Signal definition
 
 
+In ReactiveML, a signal is defined as follows:
+
+```ocaml
+let s = signal
+```
 
 ## Process definition and signal emission
 
