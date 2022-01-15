@@ -5,14 +5,14 @@ numbersections: True
 header-includes:
     - \usepackage{tikz}
     - \usetikzlibrary{chains, decorations.pathreplacing}
-abstract: This project aims at turning the current implementation of ReactiveML, a reactive language forked from OCaml around the 3.4 version, and whose pure-OCaml features did not involve in sync with the main project, into an extension to the official OCaml compiler in order to gain access to all modern features and libraries as well as allow ReactiveML and OCaml code to interoperate transparently, even within a single program or module.
+abstract: This project aims at turning the current implementation of ReactiveML, a reactive language forked from OCaml around the 3.4 version, and whose pure-OCaml features did not evolve in sync with the main project, into an extension to the official OCaml compiler in order to gain access to all modern features and libraries as well as allow ReactiveML and OCaml code to interoperate transparently, even within a single program or module.
 ---
 
 # Motivation
 
-[ReactiveML](https://github.com/reactiveml/rml) is a synchronous, even-based language based on OCaml 3.4. It has been implemented using the original OCaml compiler a while back, and the OCaml part as not been updated since then, as every commit to the OCaml repository would have to get adapted and merged into RML. Thus ReactiveML only supports features that were present in this version, meaning that some things as modules and object-oriented structures, as well as any third-party extern OCaml library, cannot be used in ReactiveML, thus depriving the user of using features from the OCaml ecosystem from within ReactiveML code.
+[ReactiveML](https://github.com/reactiveml/rml) is a synchronous, event-based language based on OCaml 3.4. It has been implemented using the original OCaml compiler v3.4, and the OCaml part as not been updated since then, as every commit to the OCaml repository would have to get adapted and merged into RML. Thus ReactiveML only supports features that were present in this version, meaning that some things such as modules and object-oriented structures, as well as any third-party extern OCaml library, cannot be used in ReactiveML, thus depriving the user of using features from the OCaml ecosystem from within ReactiveML code.
 
-Our project is aimed at addressing this issue by turning ReactiveML into an extension, via the ppx protocol, the the OCaml compiler, such that anyone can use ReactiveML inside an OCaml program while being free of using any other feature from the language. Another benefit comes from the upcoming $5$.x.x OCaml version, which will bring multicore support, meaning tweaking the ReactiveML interpreter to use multiple execution thread at once will come in the realm of possible things.
+Our project is aimed at addressing this issue by turning ReactiveML into an extension, via the ppx protocol, to the OCaml compiler, such that anyone can use ReactiveML inside an OCaml program while being free of using any other feature from the language. Another benefit comes from the upcoming $5$.x.x OCaml version, which will bring multicore support, meaning tweaking the ReactiveML interpreter to use multiple execution threads at once will come in the realm of possible things.
 
 An added benefit is that ReactiveML should become a lot more maintainable, as it now doesn't need its own parser, core libraries, etc. The only logic left in ReactiveML its core functionnalities and our ppx extension. All the rest comes from the stock OCaml distribution. This means that maintaining ReactiveML "only" involves keeping the ppx extension in sync with OCaml's syntax evolution, as well as updating the ReactiveML semantics themselves;.
 
@@ -200,9 +200,27 @@ For both of then, the condition with a `when` can still be written, except that 
 
 ## Present
 
+The `present` operator uses the `if` syntax, as it has semantics kind of similar to a `if` construct.
+
+We can use:
+
+```ocaml
+if%present s then a := false else print_endline "Failed";
+```
+
 ## Do when
 
-## Last, default
+## Last, default, pre
+
+The `last`, `default` and `pre` operators were quite simple to implement and only involved detecting function calls with these keywords.
+
+We can thus have:
+
+```ocaml
+let v_pre = pre s;;
+let v_last = last s;;
+let v_default = default s;;
+```
 
 # Our work
 
