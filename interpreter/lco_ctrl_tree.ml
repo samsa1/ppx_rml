@@ -663,12 +663,13 @@ module Rml_interpreter : Lco_interpreter.S =
 (**************************************)
 (* await_all_match                    *)
 (**************************************)
-    let step_await_all_match f_k ctrl (n,wa,wp) matching p = assert false
-      (* let w = if ctrl.kind = Top then wa else wp in
+    let step_await_all_match f_k ctrl (n,wa,wp) matching p =
+      let w = if ctrl.kind = Top then wa else wp in
       let f_await_all_match =
 	if ctrl.kind = Top then
 	  let rec f_await_top =
 	    fun _ ->
+				Event.lock ();
 	      if !eoi
 	      then
 		let v = Event.value n in
@@ -676,23 +677,21 @@ module Rml_interpreter : Lco_interpreter.S =
 		then
 		  let x = v in
 		  let f_body = p x f_k ctrl in
-		  ctrl.next <- f_body :: ctrl.next;
-		  sched()
+			assert (C.send_poll ctrl.next f_body)
 		else
-		  (w := f_await_top :: !w;
-		   sched ())
+			assert (C.send_poll w f_await_top)
 	      else
 		if Event.status n
 		then
-		  (weoi := f_await_top :: !weoi;
-		   sched ())
+			assert (C.send_poll weoi f_await_top)
 		else
-		  (w := f_await_top :: !w;
-		   sched ())
+			assert (C.send_poll w f_await_top);
+				Event.unlock ()
 	  in f_await_top
 	else
 	  let rec f_await_not_top =
 	    fun _ ->
+				Event.lock ();
 	      if !eoi
 	      then
 		let v = Event.value n in
@@ -700,17 +699,15 @@ module Rml_interpreter : Lco_interpreter.S =
 		then
 		  let x = v in
 		  let f_body = p x f_k ctrl in
-		  ctrl.next <- f_body :: ctrl.next;
-		  sched()
+			assert (C.send_poll ctrl.next f_body)
 		else
-		    (ctrl.next <- f_await_not_top :: ctrl.next;
-		     sched ())
+			assert (C.send_poll ctrl.next f_await_not_top)
 	      else
-		(w := f_await_not_top :: !w;
-		 toWakeUp := w :: !toWakeUp;
-		 sched ())
+		(assert (C.send_poll w f_await_not_top);
+		 assert (C.send_poll toWakeUp w));
+				Event.unlock ()
 	  in f_await_not_top
-      in f_await_all_match *)
+      in f_await_all_match
 
 
     let rml_await_all_match expr_evt matching p =
@@ -1199,8 +1196,8 @@ let rml_loop p =
 (**************************************)
 
     let rml_until_handler_local
-	(expr_evt: unit -> ('a, 'b) event) matching_opt p p_handler = assert false
-      (* fun f_k ctrl ->
+	(expr_evt: unit -> ('a, 'b) event) matching_opt p p_handler =
+      fun f_k ctrl ->
 	let evt = ref (Obj.magic() : ('a, 'b) event) in
 	let handler =
 	  fun () ->
@@ -1227,10 +1224,10 @@ let rml_loop p =
 		  (fun () -> Event.status n && matching (Event.value n));
 	    end;
 	    start_ctrl f_k ctrl f new_ctrl unit_value
-	in f_until *)
+	in f_until
 
-    let rml_until_handler_local' (n,_,_) matching_opt p p_handler = assert false
-      (* fun f_k ctrl ->
+    let rml_until_handler_local' (n,_,_) matching_opt p p_handler =
+      fun f_k ctrl ->
 	let handler =
 	  fun () ->
 	    let x =
@@ -1250,10 +1247,10 @@ let rml_loop p =
 	    new_ctrl.cond <-
 	      (fun () -> Event.status n && matching (Event.value n));
 	end;
-	start_ctrl f_k ctrl f new_ctrl *)
+	start_ctrl f_k ctrl f new_ctrl
 
-    let rml_until_handler_conf_local expr_cfg matching_opt p p_handler = assert false
-      (* fun f_k ctrl ->
+    let rml_until_handler_conf_local expr_cfg matching_opt p p_handler =
+      fun f_k ctrl ->
         let ref_get = ref (fun () -> raise RML) in
         let handler =
           fun () ->
@@ -1275,7 +1272,7 @@ let rml_loop p =
                   (fun () -> is_true () && matching (get ()));
             end;
             start_ctrl f_k ctrl f new_ctrl unit_value
-        in f_until *)
+        in f_until
 
 
     let rml_until_handler expr_evt p p_handler =
@@ -1739,34 +1736,38 @@ let rml_loop p =
 (* rml_make_unit                                  *)
 (**************************************************)
 
-    let rml_make_unit (p: unit process) = assert false
-(*
+    let rml_make_unit (p: unit process) =
+
       (* Function to create the last continuation of a toplevel process *)
       let join_end =
-	let term_cpt = ref 0 in
+	let term_cpt = newRef 0 in
 	fun () ->
-	  incr term_cpt;
+		Mutex.lock (snd term_cpt);
+	  incr (fst term_cpt);
+		Mutex.unlock (snd term_cpt);
 	  let f _x =
-	    decr term_cpt;
-	    if !term_cpt > 0 then
-	      sched()
+			Mutex.lock (snd term_cpt);
+	    decr (fst term_cpt);
+	    if !(fst term_cpt) > 0 then
+	      Mutex.unlock (snd term_cpt)
 	    else
-	      raise End
+	     (Mutex.unlock (snd term_cpt);
+			  raise End)
 	  in f
       in
 
       (* the main step function *)
       let f = p () (join_end()) top in
-      current := [f];
+			assert (C.send_poll to_launch f);
 
       (* the react function *)
       let rml_react () =
 	try
-	  sched ();
+	  await ();
 	  eoi := true;
-	  wakeUp weoi;
+	  wakeUp false weoi;
 	  wakeUpAll ();
-	  sched ();
+	  await ();
 	  eval_control_and_next_to_current ();
 	  Event.next ();
 	  eoi := false;
@@ -1778,50 +1779,54 @@ let rml_loop p =
       (* the add_process function*)
       let add_process p =
 	let f =  p () (join_end()) top in
-	current := f :: !current
+	assert (C.send_poll to_launch f)
       in
 
       rml_react, add_process
-*)
+
 (**************************************************)
 (* rml_make_exec_process                          *)
 (**************************************************)
 
-    let rml_make_exec_process (p: unit process) = assert false
-(*
+    let rml_make_exec_process (p: unit process) =
+
       (* Function to create the last continuation of a toplevel process *)
       let join_end =
-	let term_cpt = ref 0 in
+	let term_cpt = newRef 0 in
 	fun () ->
-	  incr term_cpt;
+		Mutex.lock (snd term_cpt);
+	  incr (fst term_cpt);
+		Mutex.unlock (snd term_cpt);
 	  let f _x =
-	    decr term_cpt;
-	    if !term_cpt > 0 then
-	      ()
+			Mutex.lock (snd term_cpt);
+	    decr (fst term_cpt);
+	    if !(fst term_cpt) > 0 then
+	      Mutex.unlock (snd term_cpt)
 	    else
-	      raise End
+	     (Mutex.unlock (snd term_cpt);
+				raise End)
 	  in f
       in
 
       (* the add_process function*)
       let add_process p =
 	let f =  p () (join_end()) top in
-	current := (T.async pool f) :: !current
+	assert (C.send_poll to_launch f)
       in
 
       (* the main step function *)
       let f = p () (join_end()) top in
-      current := [T.async pool f];
+			assert (C.send_poll to_launch f);
 
       (* the react function *)
       let rml_react proc_list =
 	try
 	  List.iter add_process proc_list;
-	  await();
+	  await ();
 	  eoi := true;
-	  wakeUp weoi;
+	  wakeUp false weoi;
 	  wakeUpAll ();
-		await();
+		await ();
 	  eval_control_and_next_to_current ();
 	  Event.next ();
 	  eoi := false;
@@ -1832,6 +1837,5 @@ let rml_loop p =
 
       rml_react
 
-*)
 
   end (* Module Rml_interpreter *)
