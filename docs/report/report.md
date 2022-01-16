@@ -22,39 +22,39 @@ As an extension to our work, a multicore intepreter for ReactiveML yields comput
 
 ## What is PPX
 
-The OCaml compiler provides a technology called PPX. A PPX rewriter is preprocess that modifies the ocaml code just after it was parsed.
+The OCaml compiler provides a technology called PPX. A PPX rewriter is a preprocess that modifies the OCaml code just after it was parsed.
 
-To use a PPX rewriter the user can add the following line into his `dune`file (exemple given for the `ppx_rml` PPX rewriter):
+To use a PPX rewriter, the user can add the following line into their `dune` file (e.g. for the `ppx_rml` PPX rewriter):
 
 ```lisp
 (preprocess (pps ppx_rml))
 ```
 
-On the other side, the developper writes a library called `ppx_rml` that register one or multiple flags.
+On the other side, the developper writes a library called `ppx_rml` that may register one or multiple flags.
 
-After parsing an OCaml code, the compiler search for flags in the AST. For every flag found, the
-associated subtree is given to the handler function associated with the flag. This handler function takes an AST node as argument and returns a new AST node (the real type is actually a bit more complicated).
+After parsing a chunk of OCaml code, the compiler searches for flags in the AST. For every flag found, the
+associated subtree is given to the handler function associated with the flag. This handler function takes an AST node as argument and returns a new AST node (in practive, the types involved are a bit mroe complicated).
 
 There are two types of PPX flags : attributes and extensions.
 
 ### Atributes
 
-Attributes are writen with `@` and attached to a node of the AST. The most common exemple is the `ppx_deriving`.
+Attributes are written with `@` and attached to a node of the AST. The most common exemple is the `ppx_deriving`.
 
-The following code adds the attribute `deriving` with the argument `(show, eq)` to the node representing `type point3d = float * float * float` of the AST. Throught preprocess, an attribute will add new nodes to the AST.
+The following code adds the attribute `deriving` with the argument `(show, eq)` to the node representing `type point3d = float * float * float` in the AST. Through the preprocessing, an attribute will add new nodes to the AST.
 
 ```ocaml
 type point3d = float * float * float
 [@@deriving show, eq]
 ```
 
-This exemples implements function for testing equality and printing elements of type `point3d` automaticaly. Thus the developper won't need to change them when he changes the type, everything is handled by the preprocess.
+This exemple implements functions for testing equality and printing elements of type `point3d` automaticaly. Thus the developper won't need to change them when he changes the type, everything is handled by the preprocess. The idea behind this automatic implementation is that these functions are usually boilerplate code that is well-suited for automatic code generation. This is similar to Rust's procedural macros, with the help of which one can implement the traits "Debug", "Hash,", "Copy", "Eq", "Ord", etc).
 
-An attribute is written with one to three `@` depending of the localisation inside the AST (one to associate it to a expression, two to associate it to a structure item and three to create a new independant structure item).
+An attribute is written with one to three `@` depending of the location inside the AST (one to associate it to a expression, two to associate it to a structure item and three to create a new independant structure item).
 
 ### Extension
 
-Extensions are writen with `%`. In opposition to attributes, extension are nodes of the AST. During preprocess, the AST node is rewritten by the handler function associated with the corresponding extension extension.
+Extensions are written with `%`. Contrarily to attributes, extensiosn are nodes of the AST. During preprocessing, the AST node is rewritten by the handler function associated with the corresponding extension extension.
 
 A good exemple of preprocess trough extension is `ppx_getenv2`. This extension replaces `[%getven "PPX_GETENV2"]` with a string corresponding to the value of `PPX_GENENV2` at compilation time.
 
@@ -84,11 +84,11 @@ An extension is written with one or two `%` depending of the localisation inside
 
 ## Our usage of PPX
 
-In order to get all the tools from the existing ReactiveML compiler we just changed the front and the back end of the compiler rather then developping a brand new compiler.
+In order to get all the tools from the existing ReactiveML compiler we just changed the front and the back end of the compiler rather then developping a brand new one.
 
 The user encompasses his RML code with the `rml` extension. Thus the handler registered with the extension flag `rml` is given the AST of the corresponding code by `ocamlc`. This AST first goes through the function `Ocaml2rml.main` that translate the OCaml's AST into a RML's AST. The AST obtained can now go through the whole typing and optimisation process inside the compiler. Lastly, at the backend of the compiler, instead of printing the OCaml code, the string representing the obtained code is given to OCaml's parser in order to obtain a new clean AST.
 
-However the AST obtained throught this method is a list of structure item when the preprocess accepts only a structure item. In order to go around this problem we encompass the code generated in a module (who is called RML by default).
+However the AST obtained throught this method is a list of structure item when the preprocess only accepts a structure item. In order to go around this problem we encompass the code generated in a module (who is called RML by default).
 
 # Syntax and conversion
 
@@ -96,7 +96,7 @@ However the AST obtained throught this method is a list of structure item when t
 
 As the compiler is not called like it usually is, the way to pass arguments had to be changed.
 
-With the ppx version of the compiler the arguments are given as attributes in the first lines of the rml code. For exemple if someone wants to give the flag `-sampling 0.01` to the compiler than he just need to write `[@@@sampling 0.01]` in the first line of the rml code. Just like this (exemple taken from `test/darwin.ml`):
+With the ppx version of the compiler the arguments are given as attributes in the first lines of the rml code. For exemple if someone wants to give the flag `-sampling 0.01` to the compiler than they just need to write `[@@@sampling 0.01]` in the first line of the rml code. Just like this exemple taken from `test/darwin.ml`:
 
 ```ocaml
 [%%rml
@@ -141,9 +141,9 @@ such that a signal definition is always done alone.
 
 ## Process definition and signal emission
 
-Signals can be emitted in ppx_rml the same way than in RML.
+Signals can be emitted in ppx_rml the same way as in RML.
 
-You just need to write `emit s` to emit the signal `s` or `emit s v` to emit the value `v` on the signal `s`.
+One just needs to write `emit s` to emit the signal `s` or `emit s v` to emit the value `v` on the signal `s`.
 
 When the ppx preprocess finds a function application node where the expression corresponding to the function is the  
 identifier `emit` then we translate it to the corresponding node of the RML's AST.
@@ -156,14 +156,14 @@ let process p a = expr
 
 Defines a process `p` that takes an argument called `a`.
 
-To do this, the preprocess looks for the name `process` in each let binding. In can it finds one, it takes the first argument of the function defined (because OCaml's parser understands `let process p = ...` as `let process = fun p -> ...`) and uses it as the process name and modifes the rest to transform it into a process.
+To do this, the preprocesser looks for the name `process` in each let binding. In can it finds one, it takes the first argument of the function defined (because OCaml's parser understands `let process p = ...` as `let process = fun p -> ...`) and uses it as the process name and modifes the rest to transform it into a process.
 
 ## Await
 
-There exist to different `await` in RML :
+There exist two different `await` constructs in RML :
 
-- `await s(l) /\ s2(l2) in expr` who binds the value `l` of the signal `s` and the value `l2` of signal `s2` in `expr` (this works like a `let l = ... in `)
-- and `await s` that just stop the process until the signal `s` is recieved.
+- `await s(l) /\ s2(l2) in expr` which binds the value `l` of the signal `s` and the value `l2` of signal `s2` in `expr` (this works like `let l = ... in `)
+- and `await s` that just stops the process until the signal `s` is received.
 
 Both syntax have been handled in a different way.
 
@@ -175,15 +175,15 @@ The `await s(l) /\ s2 = l2 in expr` has been rewritten as
 let%await All = l = s && l2 = s2 in expr
 ```
 
-Where `All` can be replaced by `Immediate One` or `One` depending of when you want the process to wake up (see RML's documentation for more information).
+Where `All` can be replaced by `Immediate One` or `One` depending of when one wants the process to wake up (see RML's documentation for more information).
 
 ### Await s
 
-On the other hand, `await s` is still written the same way, except that `/\` has been replace by `&&` and `\/` by `||`
+On the other hand, `await s` is still written the same way, except that the `/\` operator has been replace by `&&` and the `\/` one by `||`
 
 ### When condition
 
-For both of then, the condition with a `when` can still be written, except that you write `When` and need to put parenthesis around the condition in order to avoid priority problems.
+In both cases, a guard condition with a `when` can still be written, except that one must write `When` and needs to put parentheses around the condition in order to avoid priority problems.
 
 ## Until
 
@@ -203,7 +203,7 @@ try%until
 with [%event l = s] when l = 3 -> ()
 ```
 
-The reason we needed the `[%event ]` is that the parser wants a pattern at this place, when the rml syntax allowed any expression. Thus the extension wrapper allowed to write an expression while making the parser happy.
+The reason we needed the `[%event ]` is that the parser wants a pattern at this place, while the rml syntax allowed any expression. Thus the extension wrapper allowed to write an expression while making the parser happy.
 
 ## Do when
 
@@ -218,7 +218,7 @@ try%when
     with [%event s] -> print_endline "Not running"
 ```
 
-However, contrarely to `do .. until ..`, this construct in ReactiveML does not allow to add a guard on the `with` branch and, as a result, the ppx preprocessing will fail if one is added, e.g. `with [%event a = s] when a = s -> print_endline "Not running"`.
+However, contrarily to `do .. until ..`, this construct in ReactiveML does not allow to add a guard on the `with` branch and, as a result, the ppx preprocessing will fail if one is added, e.g. `with [%event a = s] when a = s -> print_endline "Not running"`.
 
 ## Control
 
@@ -274,5 +274,5 @@ Most of the code in ReactiveML has been written by previous developpers of the p
 ## Feature that would be nice to have
 
 - support the effects from the next version of OCaml
-- update the interpreter to enable multithreading with OCaml 5.00 (see [this project](https://git.eleves.ens.fr/svivien/ppx-rml-5) to see the tests towards such an interpreter)
-- reduce the amount of structures and types that aren't supported in RML's AST.
+- update the interpreter to enable multithreading with OCaml 5.00 (see [this project](https://git.eleves.ens.fr/svivien/ppx-rml-5) about some work towards such an interpreter)
+- reduce the amount of (modern) OCaml structures and types that aren't supported in RML's AST.
