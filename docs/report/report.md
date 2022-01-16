@@ -10,21 +10,19 @@ abstract: This project aims at turning the current implementation of ReactiveML,
 
 # Motivation
 
-[ReactiveML](https://github.com/reactiveml/rml) is a synchronous, event-based language based on OCaml 3.4. It has been implemented using the original OCaml compiler v3.4, and the OCaml part as not been updated since then, as every commit to the OCaml repository related to the parser would have to get adapted and merged into RML. Thus ReactiveML only supports features that were present in this version, meaning that some things such as modules and object-oriented structures, as well as any third-party extern OCaml library, cannot be used in ReactiveML, thus depriving the user of using features from the OCaml ecosystem from within ReactiveML code.
+[ReactiveML](https://github.com/reactiveml/rml) is a synchronous, event-based language based on OCaml 3.4. It has been implemented using the original OCaml compiler v3.4, and the OCaml part has not been updated since then, as every commit to the OCaml repository related to the parser would have to get adapted and merged into RML. Thus ReactiveML only supports features that were present in this version, meaning that some things such as modules and object-oriented structures, as well as any third-party extern OCaml library, cannot be used in ReactiveML, thus depriving the user of the opportunity to use some features of the OCaml ecosystem from within ReactiveML code.
 
-Our project is aimed at addressing this issue by turning ReactiveML into an extension, via the ppx protocol, to the OCaml compiler, such that anyone can use ReactiveML inside an OCaml program while being free of using any other feature from the language. Another benefit comes from the upcoming $5$.x.x OCaml version, which will bring multicore support, meaning tweaking the ReactiveML interpreter to use multiple execution threads at once will come in the realm of possible things.
+Our project is aimed at addressing this issue by turning ReactiveML into an extension, via the ppx protocol, of the OCaml compiler, such that anyone can use ReactiveML inside an OCaml program while being free of using any other feature from the language. This change also bring a much simpler compilation process as ReactiveML code would only get compiler once and not twice (rmlc + ocamlc). Another benefit comes from the upcoming $5$.x.x OCaml version, which will bring multicore support as well as effects, this is a good opportunity to update ReactiveML's compiler in order to support those two new features. As an extension to our work, the project [ppx-rml-5](https://git.eleves.ens.fr/svivien/ppx-rml-5) tests a new interpreter for RML that use the new multicore feature of OCaml 5.00.
 
-An added benefit is that ReactiveML should become a lot more maintainable, as it now doesn't need its own parser, core libraries, etc. The only logic left in ReactiveML: its core functionnalities and our ppx extension. All the rest comes from the stock OCaml distribution. This means that maintaining ReactiveML "only" involves keeping the ppx extension in sync with OCaml's syntax evolution, as well as updating the ReactiveML semantics themselves.
-
-As an extension to our work, a multicore intepreter for ReactiveML yields computation time benefits.
+An added benefit is that ReactiveML should become a lot more maintainable, as it doesn't need anymore its own parser, core libraries, etc. The only logic left in ReactiveML would be its core functionnalities and our ppx extension. All the rest comes from the stock OCaml distribution. This means that maintaining ReactiveML "only" involves keeping the ppx extension in sync with OCaml's syntax evolution, as well as updating the ReactiveML semantics themselves.
 
 # How it is done
 
 ## What is PPX
 
-The OCaml compiler provides a technology called PPX. A PPX rewriter is preprocess that modifies the ocaml code just after it was parsed.
+The OCaml compiler provides a technology called PPX. A PPX rewriter is preprocess that modifies ocaml's code just after it has been parsed. This allow to generate many complex code automatically just like macros in other programming languages.
 
-To use a PPX rewriter the user can add the following line into his `dune`file (exemple given for the `ppx_rml` PPX rewriter):
+To use a PPX rewriter the user can add the following line into his `dune` file (exemple given for the `ppx_rml` PPX rewriter):
 
 ```lisp
 (preprocess (pps ppx_rml))
@@ -32,7 +30,7 @@ To use a PPX rewriter the user can add the following line into his `dune`file (e
 
 On the other side, the developper writes a library called `ppx_rml` that register one or multiple flags.
 
-After parsing an OCaml code, the compiler search for flags in the AST. For every flag found, the
+After parsing an OCaml code, the compiler looks in the AST for flags. For every flag found, the
 associated subtree is given to the handler function associated with the flag. This handler function takes an AST node as argument and returns a new AST node (the real type is actually a bit more complicated).
 
 There are two types of PPX flags : attributes and extensions.
@@ -41,20 +39,20 @@ There are two types of PPX flags : attributes and extensions.
 
 Attributes are writen with `@` and attached to a node of the AST. The most common exemple is the `ppx_deriving`.
 
-The following code adds the attribute `deriving` with the argument `(show, eq)` to the node representing `type point3d = float * float * float` of the AST. Throught preprocess, an attribute will add new nodes to the AST.
+The following code adds the attribute `deriving` with the argument `(show, eq)` to the node representing `type point3d = float * float * float` of the AST. Through preprocess, an attribute will add new nodes to the AST.
 
 ```ocaml
 type point3d = float * float * float
 [@@deriving show, eq]
 ```
 
-This exemples implements function for testing equality and printing elements of type `point3d` automaticaly. Thus the developper won't need to change them when he changes the type, everything is handled by the preprocess.
+This exemple implements function for testing equality and printing elements of type `point3d` automaticaly. Thus the developper won't need to change them when he changes the type, everything is handled by the preprocess.
 
 An attribute is written with one to three `@` depending of the localisation inside the AST (one to associate it to a expression, two to associate it to a structure item and three to create a new independant structure item).
 
 ### Extension
 
-Extensions are writen with `%`. In opposition to attributes, extension are nodes of the AST. During preprocess, the AST node is rewritten by the handler function associated with the corresponding extension extension.
+Extensions are writen with `%`. In opposition to attributes, extensions are nodes of the AST. During preprocess, the AST node is rewritten by the handler function associated with the corresponding extension.
 
 A good exemple of preprocess trough extension is `ppx_getenv2`. This extension replaces `[%getven "PPX_GETENV2"]` with a string corresponding to the value of `PPX_GENENV2` at compilation time.
 
@@ -86,7 +84,7 @@ An extension is written with one or two `%` depending of the localisation inside
 
 In order to get all the tools from the existing ReactiveML compiler we just changed the front and the back end of the compiler rather then developping a brand new compiler.
 
-The user encompasses his RML code with the `rml` extension. Thus the handler registered with the extension flag `rml` is given the AST of the corresponding code by `ocamlc`. This AST first goes through the function `Ocaml2rml.main` that translate the OCaml's AST into a RML's AST. The AST obtained can now go through the whole typing and optimisation process inside the compiler. Lastly, at the backend of the compiler, instead of printing the OCaml code, the string representing the obtained code is given to OCaml's parser in order to obtain a new clean AST.
+The user encompasses his RML code with the `rml` extension. Thus the handler function registered with the extension flag `rml` is given the AST of the corresponding code by `ocamlc`. This AST first goes through the function `Ocaml2rml.main` that translate the OCaml's AST into a RML's AST. The AST obtained can now go through the whole typing and optimisation process inside the compiler. Lastly, at the backend of the compiler, instead of printing the OCaml code, the string representing the obtained code is given to OCaml's parser in order to obtain a new clean AST.
 
 However the AST obtained throught this method is a list of structure item when the preprocess accepts only a structure item. In order to go around this problem we encompass the code generated in a module (who is called RML by default).
 
@@ -145,10 +143,9 @@ Signals can be emitted in ppx_rml the same way than in RML.
 
 You just need to write `emit s` to emit the signal `s` or `emit s v` to emit the value `v` on the signal `s`.
 
-When the ppx preprocess finds a function application node where the expression corresponding to the function is the  
-identifier `emit` then we translate it to the corresponding node of the RML's AST.
+When the ppx preprocess finds a function application node where the expression corresponding to the function is the identifier `emit` then we translate it to the corresponding node of the RML's AST.
 
-In a similar way process can be defined in ppx_rml the same way than in  RML. The syntax :
+In a similar way process can be defined in ppx_rml the same way than in RML. The syntax :
 
 ```ocaml
 let process p a = expr
@@ -163,7 +160,7 @@ To do this, the preprocess looks for the name `process` in each let binding. In 
 There exist to different `await` in RML :
 
 - `await s(l) /\ s2(l2) in expr` who binds the value `l` of the signal `s` and the value `l2` of signal `s2` in `expr` (this works like a `let l = ... in `)
-- and `await s` that just stop the process until the signal `s` is recieved.
+- and `await s` that just stop the process until the signal `s` is received.
 
 Both syntax have been handled in a different way.
 
@@ -211,11 +208,11 @@ The `do .. when ..` sutructure is implemented the same way as `until` :
 
 ```ocaml
 try%when
-      while !a do
-        global_value := !global_value + 1;
-        if%present s2 then a := false;
-      done
-    with [%event s] -> print_endline "Not running"
+    while !a do
+    global_value := !global_value + 1;
+    if%present s2 then a := false;
+    done
+with [%event s] -> print_endline "Not running"
 ```
 
 However, contrarely to `do .. until ..`, this construct in ReactiveML does not allow to add a guard on the `with` branch and, as a result, the ppx preprocessing will fail if one is added, e.g. `with [%event a = s] when a = s -> print_endline "Not running"`.
@@ -264,6 +261,16 @@ Most of the code in ReactiveML has been written by previous developpers of the p
 - changing the build chain to `dune` (every dune files)
 - adding tests (`test` folder) using the `alcotest` opam library
 - adding the ppx version of the compiler (`compiler/main/rmlc.ml` and `compiler/parsing/ocaml2rml.ml`)
+
+# What next ?
+
+Currently our code just started to be merge into RML repository :
+
+- PR1 renamming files to avoid conflics with Ppxlib (merged)
+- PR2 changing the build chain from Makefile to Dune (under review)
+- PR3 removing the >500 warnings (awaiting review)
+
+More PR are going to be send in order to merge our code step by step in RML while allowing Louis Mandel (the maintainer of RML) to review the full code.
 
 # Future extensions
 
