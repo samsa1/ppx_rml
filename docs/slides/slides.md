@@ -68,3 +68,10 @@ Exemples
 
 - Multithreaded interpreter
 - Support effects from OCaml 5.00
+
+## Work distribution
+
+- new build chain (S with bug correction by C)
+- PPX interface (S)
+- AST translation (S for every thing between OCaml and RML, C for RML-specific structures)
+- Tests (mostly C)
