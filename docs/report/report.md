@@ -256,6 +256,8 @@ let v_default = default s;;
 
 # Our work
 
+The code is available at : https://github.com/samsa1/ppx_rml.
+
 Most of the code in ReactiveML has been written by previous developpers of the projet. Our work resides in :
 
 - changing the build chain to `dune` (every dune files)
